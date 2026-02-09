@@ -60,7 +60,7 @@ function renderTokenList(tokens) {
                     ${t.nsfw_enabled ? '<span class="status-badge active" style="font-size: 0.6em; padding: 2px 5px; margin-left: 5px;">NSFW</span>' : ''}
                 </div>
                 <div class="token-meta">
-                    ID: ${t.id.substring(0, 8)}... | 使用次数: ${t.use_count} | ${t.has_user_id ? '有 UserID' : '无 UserID'}
+                    使用次数: ${t.use_count}
                 </div>
             </div>
             <span class="status-badge ${t.status}">${t.status === 'active' ? '活跃' : t.status}</span>

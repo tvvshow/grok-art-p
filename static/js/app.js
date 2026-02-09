@@ -1,4 +1,5 @@
 import { initTokenManager } from './modules/tokenManager.js';
+import { initApiKeyManager } from './modules/apiKeyManager.js';
 import { initImageGen } from './modules/imageGen.js';
 import { initVideoGen } from './modules/videoGen.js';
 
@@ -36,6 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialize Modules
     initTokenManager();
+    initApiKeyManager();
     initImageGen();
     initVideoGen();
 

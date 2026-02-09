@@ -6,4 +6,5 @@ export interface Env {
   KV_CACHE_MAX_BYTES?: string;
   AUTH_USERNAME?: string;
   AUTH_PASSWORD?: string;
+  VIDEO_POSTER_PREVIEW?: string;
 }

@@ -11,19 +11,18 @@ mode = "smart"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "grok-art-proxy"
-# This will be replaced by GitHub Actions during deployment
-database_id = "YOUR_D1_DATABASE_ID"
+database_name = "grok-imagine"
+database_id = "47ac51d3-e323-4369-931d-a7fd949b6434"
 migrations_dir = "migrations"
 
 [[kv_namespaces]]
 binding = "KV_CACHE"
-# This will be replaced by GitHub Actions during deployment
-id = "YOUR_KV_NAMESPACE_ID"
+id = "bb4133f909534054aabaf3f59b9bbf5c"
 
 [vars]
 BUILD_SHA = "dev"
 KV_CACHE_MAX_BYTES = "26214400"
+VIDEO_POSTER_PREVIEW = "true"
 
 # Authentication - set via Cloudflare Dashboard or wrangler secret:
 #   npx wrangler secret put AUTH_USERNAME

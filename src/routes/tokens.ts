@@ -116,7 +116,7 @@ app.delete("/api/tokens", async (c) => {
 // Process max 20 tokens per request in PARALLEL to maximize speed
 // Each token needs 2 subrequests, so 20 * 2 = 40 < 50 limit
 app.post("/api/tokens/enable-nsfw", async (c) => {
-  const body = await c.req.json<{ offset?: number }>().catch(() => ({}));
+  const body = await c.req.json<{ offset?: number }>().catch(() => ({ offset: 0 }));
   const offset = body.offset || 0;
   const BATCH_SIZE = 20; // Parallel execution: 20 * 2 = 40 subrequests < 50 limit
 

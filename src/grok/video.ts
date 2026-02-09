@@ -21,6 +21,7 @@ export interface VideoResult {
   video_id: string;
   video_url: string;
   original_url: string;
+  thumbnail_url: string;
   token_id: string;
   message: string;
 }
@@ -184,6 +185,7 @@ export async function* generateVideo(
     let buffer = "";
     let videoId: string | null = null;
     let videoUrl: string | null = null;
+    let thumbnailUrl: string | null = null;
     let lastProgress = -1;
 
     while (true) {
@@ -206,8 +208,10 @@ export async function* generateVideo(
             const progress = (videoResp.progress as number) || 0;
             videoId = (videoResp.videoPostId as string) || (videoResp.videoId as string) || videoId;
             const url = videoResp.videoUrl as string | undefined;
+            const thumb = videoResp.thumbnailImageUrl as string | undefined;
 
             if (url) videoUrl = url;
+            if (thumb) thumbnailUrl = thumb;
 
             // Check moderation
             if (videoResp.moderated) {
@@ -245,11 +249,21 @@ export async function* generateVideo(
       // Return proxy URL for frontend to use
       const proxyUrl = `/api/proxy/video?url=${encodeURIComponent(originalUrl)}&token=${encodeURIComponent(token_id)}`;
 
+      // Build thumbnail proxy URL if available
+      let thumbnailProxyUrl = "";
+      if (thumbnailUrl) {
+        const originalThumbUrl = thumbnailUrl.startsWith("http")
+          ? thumbnailUrl
+          : `https://assets.grok.com/${thumbnailUrl.replace(/^\//, "")}`;
+        thumbnailProxyUrl = `/api/proxy/assets/${encodeURIComponent(originalThumbUrl)}?token=${encodeURIComponent(token_id)}`;
+      }
+
       yield {
         type: "complete",
         video_id: videoId,
         video_url: proxyUrl,
         original_url: originalUrl,
+        thumbnail_url: thumbnailProxyUrl,
         token_id: token_id,
         message: `Video generated: ${prompt}`,
       };

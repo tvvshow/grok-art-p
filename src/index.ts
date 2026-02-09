@@ -4,6 +4,12 @@ import { tokenRoutes } from "./routes/tokens";
 import { imagineRoutes } from "./routes/imagine";
 import { proxyRoutes } from "./routes/proxy";
 import { authRoutes, hasAuthCookie } from "./routes/auth";
+import { apiKeyRoutes } from "./routes/api-keys";
+import { imagesRoutes } from "./routes/v1/images";
+import { videosRoutes } from "./routes/v1/videos";
+import { modelsRoutes } from "./routes/v1/models";
+import { chatRoutes } from "./routes/v1/chat";
+import { apiAuthMiddleware } from "./middleware/api-auth";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -81,6 +87,19 @@ function isLoginPagePath(pathname: string): boolean {
   );
 }
 
+// Check if path is a public proxy path (video/image proxy for API consumers)
+function isPublicProxyPath(pathname: string): boolean {
+  return (
+    pathname === "/api/proxy/video" ||
+    pathname.startsWith("/api/proxy/assets/")
+  );
+}
+
+// Check if path uses API Key authentication (OpenAI compatible API)
+function isApiKeyAuthPath(pathname: string): boolean {
+  return pathname.startsWith("/v1/");
+}
+
 // Error handler
 app.onError((err, c) => {
   console.error("Unhandled error:", err);
@@ -104,6 +123,16 @@ app.use("*", async (c, next) => {
     return next();
   }
 
+  // Allow public proxy paths without auth (they use token param for validation)
+  if (isPublicProxyPath(pathname)) {
+    return next();
+  }
+
+  // Skip cookie auth for API Key authenticated paths (handled by apiAuthMiddleware)
+  if (isApiKeyAuthPath(pathname)) {
+    return next();
+  }
+
   // Check for auth cookie
   const hasAuth = hasAuthCookie(c.req.raw);
 
@@ -121,6 +150,16 @@ app.use("*", async (c, next) => {
 
 // Mount auth routes (before other API routes)
 app.route("/", authRoutes);
+
+// Mount API Key management routes (protected by cookie auth)
+app.route("/", apiKeyRoutes);
+
+// Mount OpenAI compatible API routes (protected by API Key auth)
+app.use("/v1/*", apiAuthMiddleware);
+app.route("/v1/chat", chatRoutes);
+app.route("/v1/images", imagesRoutes);
+app.route("/v1/videos", videosRoutes);
+app.route("/v1/models", modelsRoutes);
 
 // Mount API routes
 app.route("/", tokenRoutes);

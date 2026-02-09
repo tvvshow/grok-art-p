@@ -1,14 +1,97 @@
 # Grok Art Proxy
 
-一个基于 Cloudflare Workers 的 Grok 图片/视频生成代理服务。
+基于 Cloudflare Workers 的 Grok AI 代理服务，提供 OpenAI 兼容的 API 接口，支持文本对话、图片生成和视频生成。
 
 ## 功能特性
 
-- 图片生成 - 支持多种宽高比、NSFW 模式
-- 视频合成 - 将图片转换为动态视频
-- Token 管理 - 批量导入、导出、状态监控
-- 认证保护 - 用户名密码登录
-- 一键部署 - Fork 后通过 GitHub Actions 自动部署
+- **OpenAI 兼容 API** - 支持 `/v1/chat/completions`、`/v1/images/generations`、`/v1/models` 等标准接口
+- **多模型支持** - Grok 3/4/4.1 系列文本模型
+- **图片生成** - 支持 5 种宽高比，NSFW 模式
+- **视频生成** - 一键从提示词生成视频，支持多种宽高比
+- **Token 池管理** - 批量导入、自动轮换、失败重试
+- **API Key 管理** - 创建多个 API Key，支持速率限制
+- **视频海报预览** - 视频返回可点击的海报预览图
+- **认证保护** - 后台管理需用户名密码登录
+
+## 支持的模型
+
+### 文本模型
+
+| 模型 ID | 说明 |
+|---------|------|
+| `grok-3` | Grok 3 标准模式 |
+| `grok-3-fast` | Grok 3 快速模式 |
+| `grok-4` | Grok 4 标准模式 |
+| `grok-4-mini` | Grok 4 Mini (思维链) |
+| `grok-4-fast` | Grok 4 快速模式 |
+| `grok-4-heavy` | Grok 4 深度模式 |
+| `grok-4.1` | Grok 4.1 标准模式 |
+| `grok-4.1-fast` | Grok 4.1 快速模式 |
+| `grok-4.1-expert` | Grok 4.1 专家模式 |
+| `grok-4.1-thinking` | Grok 4.1 思维链模式 |
+
+### 图片模型
+
+| 模型 ID | 宽高比 |
+|---------|--------|
+| `grok-image` | 1:1 (默认) |
+| `grok-image-1_1` | 1:1 |
+| `grok-image-2_3` | 2:3 (竖向) |
+| `grok-image-3_2` | 3:2 (横向) |
+| `grok-image-16_9` | 16:9 (宽屏) |
+| `grok-image-9_16` | 9:16 (竖屏) |
+
+### 视频模型
+
+| 模型 ID | 宽高比 |
+|---------|--------|
+| `grok-video` | 16:9 (默认) |
+| `grok-video-1_1` | 1:1 |
+| `grok-video-2_3` | 2:3 |
+| `grok-video-3_2` | 3:2 |
+| `grok-video-16_9` | 16:9 |
+| `grok-video-9_16` | 9:16 |
+
+## API 使用
+
+### 对话补全
+
+```bash
+curl https://your-worker.workers.dev/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-4",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "stream": true
+  }'
+```
+
+### 图片生成
+
+```bash
+curl https://your-worker.workers.dev/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-image-16_9",
+    "messages": [{"role": "user", "content": "一只可爱的猫咪"}],
+    "stream": true
+  }'
+```
+
+### 视频生成
+
+```bash
+curl https://your-worker.workers.dev/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-video",
+    "messages": [{"role": "user", "content": "一只猫咪在草地上奔跑"}],
+    "stream": true
+  }'
+```
 
 ## 一键部署
 
@@ -24,143 +107,64 @@
 ### 步骤 2: 获取 Cloudflare 凭证
 
 1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com)
-2. 获取 **Account ID**:
-   - 进入任意 Workers 项目或点击右侧边栏查看
-   - 或访问 `https://dash.cloudflare.com/<account-id>`
+2. 获取 **Account ID** (在 Workers 页面右侧可见)
 3. 创建 **API Token**:
    - 进入 [API Tokens](https://dash.cloudflare.com/profile/api-tokens)
    - 点击 **Create Token**
    - 选择 **Edit Cloudflare Workers** 模板
-   - 确保包含以下权限:
-     - Account > Workers Scripts > Edit
-     - Account > Workers KV Storage > Edit
-     - Account > D1 > Edit
-   - 创建并复制 Token
+   - 确保包含权限: Workers Scripts Edit, Workers KV Edit, D1 Edit
 
 ### 步骤 3: 配置 GitHub Secrets
 
-进入你 Fork 的仓库 → **Settings** → **Secrets and variables** → **Actions**
-
-添加以下 Secrets:
+进入 Fork 的仓库 → **Settings** → **Secrets and variables** → **Actions**
 
 | Secret 名称 | 说明 | 必填 |
 |-------------|------|------|
 | `CLOUDFLARE_API_TOKEN` | Cloudflare API Token | ✅ |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Account ID | ✅ |
-| `AUTH_USERNAME` | 登录用户名 | ✅ |
-| `AUTH_PASSWORD` | 登录密码 | ✅ |
-| `D1_DATABASE_ID` | D1 数据库 ID (首次部署后填写) | ❌ |
-| `KV_NAMESPACE_ID` | KV 命名空间 ID (首次部署后填写) | ❌ |
+| `AUTH_USERNAME` | 后台登录用户名 | ✅ |
+| `AUTH_PASSWORD` | 后台登录密码 | ✅ |
 
-### 步骤 4: 首次部署
+### 步骤 4: 部署
 
 1. 进入 **Actions** 标签页
 2. 点击 **Deploy to Cloudflare Workers**
-3. 点击 **Run workflow**
-4. 将 `create_resources` 设置为 `true`
-5. 点击 **Run workflow** 执行
+3. 点击 **Run workflow**，将 `create_resources` 设为 `true`
+4. 等待部署完成
 
-首次部署会自动创建 D1 数据库和 KV 命名空间。
+### 步骤 5: 使用
 
-### 步骤 5: 保存资源 ID (可选)
+1. 访问 `https://grok-art-proxy.<your-account>.workers.dev`
+2. 使用配置的用户名密码登录
+3. 在 **令牌管理** 中导入 Grok Token
+4. 在 **API Key 管理** 中创建 API Key
+5. 使用 API Key 调用 API
 
-首次部署后，在 Actions 日志中找到创建的资源 ID，添加到 GitHub Secrets:
-- `D1_DATABASE_ID`
-- `KV_NAMESPACE_ID`
+## 环境变量
 
-这样后续部署会更稳定。
-
-### 步骤 6: 访问应用
-
-部署完成后，访问:
-```
-https://grok-imagine.<your-account>.workers.dev
-```
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `AUTH_USERNAME` | 后台登录用户名 | - |
+| `AUTH_PASSWORD` | 后台登录密码 | - |
+| `VIDEO_POSTER_PREVIEW` | 视频返回海报预览模式 | `true` |
 
 ## 本地开发
 
-### 安装依赖
-
 ```bash
+# 安装依赖
 npm install
-```
 
-### 配置环境变量
+# 创建 .dev.vars 文件
+echo "AUTH_USERNAME=admin" > .dev.vars
+echo "AUTH_PASSWORD=password" >> .dev.vars
 
-创建 `.dev.vars` 文件:
-
-```
-AUTH_USERNAME=admin
-AUTH_PASSWORD=your-password
-```
-
-### 创建本地数据库
-
-```bash
+# 创建本地数据库
 npx wrangler d1 create grok-imagine --local
 npx wrangler d1 migrations apply DB --local
-```
 
-### 启动开发服务器
-
-```bash
+# 启动开发服务器
 npm run dev
 ```
-
-访问 http://localhost:8787
-
-## 手动部署
-
-如果不使用 GitHub Actions，可以手动部署:
-
-```bash
-# 登录 Cloudflare
-npx wrangler login
-
-# 创建 D1 数据库
-npx wrangler d1 create grok-imagine
-
-# 创建 KV 命名空间
-npx wrangler kv namespace create KV_CACHE
-
-# 更新 wrangler.toml 中的 database_id 和 id
-
-# 执行数据库迁移
-npm run db:migrate
-
-# 部署
-npm run deploy
-
-# 设置认证密码
-echo "your-username" | npx wrangler secret put AUTH_USERNAME
-echo "your-password" | npx wrangler secret put AUTH_PASSWORD
-```
-
-## 使用说明
-
-### 添加 Token
-
-1. 登录后进入 **令牌管理** 页面
-2. 在文本框中粘贴 Token (支持多种格式):
-   - 纯 SSO Token (每行一个)
-   - JSON 数组格式
-   - CSV 格式: `sso,sso_rw,user_id,cf_clearance,name`
-3. 点击 **导入数据**
-
-### 生成图片
-
-1. 进入 **图片生成** 页面
-2. 输入提示词
-3. 选择数量、宽高比、NSFW 模式
-4. 点击 **开始生成**
-
-### 生成视频
-
-1. 先生成图片
-2. 点击图片下方的 **生成视频** 按钮
-3. 输入动作描述
-4. 选择时长和分辨率
-5. 点击 **生成视频**
 
 ## 技术栈
 
