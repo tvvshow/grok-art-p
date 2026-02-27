@@ -1,6 +1,7 @@
 import { initTokenManager } from './modules/tokenManager.js';
 import { initApiKeyManager } from './modules/apiKeyManager.js';
 import { initImageGen } from './modules/imageGen.js';
+import { initImg2Img } from './modules/img2img.js';
 import { initVideoGen } from './modules/videoGen.js';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -39,6 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initTokenManager();
     initApiKeyManager();
     initImageGen();
+    initImg2Img();
     initVideoGen();
 
     console.log('应用初始化完成');

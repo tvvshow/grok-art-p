@@ -734,3 +734,26 @@ video {
   h1 { font-size: 0.9rem; }
   .section { margin-bottom: 24px; }
 }
+
+/* ========================================
+   Image-to-Image Dropzone
+   ======================================== */
+.dropzone {
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius);
+  padding: 40px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  background: var(--color-card-bg);
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dropzone:hover,
+.dropzone.dragover {
+  border-color: var(--color-accent);
+  background: var(--color-accent-muted);
+}

@@ -453,4 +453,147 @@ app.post("/api/imagine/scroll", async (c) => {
   });
 });
 
+// Image-to-image generation (SSE stream) with auto-retry on 429
+app.post("/api/imagine/img2img", async (c) => {
+  const body = await c.req.json<{
+    image_data: string;
+    prompt?: string;
+    aspect_ratio?: string;
+    enable_nsfw?: boolean;
+    count?: number;
+    token_id?: string;
+  }>();
+
+  const { image_data, prompt = "", aspect_ratio = "1:1", enable_nsfw = true, count = 6, token_id } = body;
+
+  if (!image_data) {
+    return c.json({ error: "image_data is required" }, 400);
+  }
+
+  // Stream SSE response
+  const stream = new TransformStream();
+  const writer = stream.writable.getWriter();
+  const encoder = new TextEncoder();
+
+  const writeEvent = async (event: string, data: unknown) => {
+    await writer.write(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+  };
+
+  const db = c.env.DB;
+
+  const backgroundTask = (async () => {
+    const excludedTokenIds: string[] = [];
+    let retryCount = 0;
+    let totalCollected = 0;
+    const targetCount = Math.min(count, 6);
+
+    while (retryCount < MAX_RETRIES && totalCollected < targetCount) {
+      let token: TokenRow | null = null;
+
+      if (token_id && retryCount === 0) {
+        token = await getToken(db, token_id);
+      }
+
+      if (!token) {
+        token = await getRandomToken(db, excludedTokenIds);
+      }
+
+      if (!token) {
+        await writeEvent("error", {
+          type: "error",
+          message: excludedTokenIds.length > 0
+            ? `All tokens rate limited (tried ${excludedTokenIds.length} tokens)`
+            : "No available tokens. Please import tokens first.",
+        });
+        break;
+      }
+
+      try {
+        for await (const update of generateImages(
+          token.sso,
+          token.sso_rw,
+          prompt,
+          targetCount,
+          aspect_ratio,
+          enable_nsfw,
+          image_data
+        )) {
+          if (update.type === "error") {
+            const msg = update.message;
+
+            if (msg.includes("429") || msg.includes("Rate limited")) {
+              excludedTokenIds.push(token.id);
+              retryCount++;
+
+              await writeEvent("info", {
+                type: "info",
+                message: `Token rate limited, switching to another (attempt ${retryCount}/${MAX_RETRIES})`,
+              });
+              break;
+            } else {
+              await writeEvent("error", update);
+              await writer.close();
+              return;
+            }
+          } else if (update.type === "image") {
+            totalCollected++;
+            await writeEvent("image", update);
+
+            await writeEvent("progress", {
+              type: "progress",
+              job_id: update.job_id,
+              status: "collecting",
+              percentage: (totalCollected / targetCount) * 100,
+              completed_count: totalCollected,
+              target_count: targetCount,
+            });
+          } else if (update.type === "progress") {
+            if (update.status !== "collecting") {
+              await writeEvent("progress", update);
+            }
+          } else if (update.type === "done") {
+            await writeEvent("done", {});
+            await writer.close();
+            return;
+          }
+        }
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+
+        if (message.includes("429") || message.includes("Rate limited")) {
+          excludedTokenIds.push(token.id);
+          retryCount++;
+
+          await writeEvent("info", {
+            type: "info",
+            message: `Token rate limited, switching to another (attempt ${retryCount}/${MAX_RETRIES})`,
+          });
+          continue;
+        } else {
+          await writeEvent("error", { type: "error", message });
+          break;
+        }
+      }
+    }
+
+    if (totalCollected > 0) {
+      await writeEvent("done", {});
+    }
+    await writer.close();
+  })();
+
+  if (c.executionCtx?.waitUntil) {
+    c.executionCtx.waitUntil(backgroundTask);
+  }
+
+  return new Response(stream.readable, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
+});
+
 export { app as imagineRoutes };

@@ -23,6 +23,7 @@
             <button class="tab-btn active" data-tab="tokens">令牌管理</button>
             <button class="tab-btn" data-tab="apikeys">API 密钥</button>
             <button class="tab-btn" data-tab="imagine">图片生成</button>
+            <button class="tab-btn" data-tab="img2img">图生图</button>
             <button class="tab-btn" data-tab="video">视频合成</button>
         </nav>
 
@@ -251,6 +252,72 @@ Authorization: Bearer sk-xxxxxxxx</code></pre>
                 <div style="text-align:center; margin-top:40px;">
                     <button id="btn-load-more" class="btn btn-secondary" style="display:none;">加载更多</button>
                 </div>
+            </div>
+        </section>
+
+        <!-- Image-to-Image Panel -->
+        <section id="panel-img2img" class="panel">
+            <div class="section">
+                <h2>参考图上传</h2>
+                <div id="img2img-dropzone" class="dropzone">
+                    <div id="img2img-placeholder">
+                        <div style="font-size:48px; margin-bottom:10px;">🖼️</div>
+                        <div>点击或拖拽上传参考图</div>
+                        <div style="font-size:12px; color:#888; margin-top:8px;">支持 JPG、PNG、WebP（最大 10MB）</div>
+                    </div>
+                    <img id="img2img-preview" src="" alt="预览" style="display:none; max-width:100%; max-height:300px; border-radius:8px;">
+                    <input type="file" id="img2img-file" accept="image/*" style="display:none;">
+                </div>
+                <div style="margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                    <button id="btn-img2img-clear" class="btn btn-secondary" style="display:none;">清除图片</button>
+                    <span id="img2img-file-info" style="color:#888; font-size:13px;"></span>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>生成参数</h2>
+                <div class="form-row">
+                    <div class="form-group" style="flex:2;">
+                        <label>提示词（可选）</label>
+                        <input type="text" id="img2img-prompt" placeholder="描述你希望生成的效果，留空则仅基于参考图...">
+                    </div>
+                    <div class="form-group">
+                        <label>数量</label>
+                        <input type="number" id="img2img-count" value="6" min="1" max="6">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>宽高比</label>
+                        <select id="img2img-aspect">
+                            <option value="1:1">1:1 (正方形)</option>
+                            <option value="2:3">2:3 (竖版)</option>
+                            <option value="3:2">3:2 (横版)</option>
+                            <option value="16:9">16:9 (宽屏)</option>
+                            <option value="9:16">9:16 (手机)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>内容过滤</label>
+                        <select id="img2img-nsfw">
+                            <option value="true">允许 NSFW</option>
+                            <option value="false">安全模式</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button id="btn-img2img-generate" class="btn" style="width:100%;">开始图生图</button>
+
+                <div id="img2img-progress" class="progress-container">
+                    <div class="progress-fill"></div>
+                </div>
+                <div id="img2img-status" style="text-align:center; margin-top:10px; font-weight:bold;"></div>
+            </div>
+
+            <div class="section">
+                <h2>输出结果</h2>
+                <div id="img2img-log" class="log-container" style="height:100px; margin-bottom:20px;"></div>
+                <div id="img2img-grid" class="image-grid"></div>
             </div>
         </section>
 
