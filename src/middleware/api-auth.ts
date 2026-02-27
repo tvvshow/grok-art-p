@@ -60,22 +60,18 @@ function extractBearerToken(authHeader: string | undefined): string | null {
 /**
  * API Key authentication middleware for Hono
  *
- * This middleware:
- * 1. Extracts Bearer token from Authorization header
- * 2. Validates the API key against the database
- * 3. Checks if the API key is enabled
- * 4. Checks rate limits (429 if exceeded)
- * 5. Stores API key info in context for downstream handlers
+ * Supports two authentication styles:
+ * - OpenAI:    Authorization: Bearer <api_key>
+ * - Anthropic: x-api-key: <api_key>
  */
 export const apiAuthMiddleware: MiddlewareHandler<ApiAuthEnv> = async (
   c,
   next
 ): Promise<Response | void> => {
-  // Extract Authorization header
-  const authHeader = c.req.header("Authorization");
-
-  // Extract Bearer token
-  const token = extractBearerToken(authHeader);
+  // x-api-key (Anthropic style) takes priority, then Authorization Bearer (OpenAI style)
+  const token =
+    c.req.header("x-api-key") ||
+    extractBearerToken(c.req.header("Authorization"));
 
   if (!token) {
     return createErrorResponse(

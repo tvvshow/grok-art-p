@@ -9,6 +9,7 @@ import { imagesRoutes } from "./routes/v1/images";
 import { videosRoutes } from "./routes/v1/videos";
 import { modelsRoutes } from "./routes/v1/models";
 import { chatRoutes } from "./routes/v1/chat";
+import { messagesRoutes } from "./routes/v1/messages";
 import { apiAuthMiddleware } from "./middleware/api-auth";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -157,6 +158,7 @@ app.route("/", apiKeyRoutes);
 // Mount OpenAI compatible API routes (protected by API Key auth)
 app.use("/v1/*", apiAuthMiddleware);
 app.route("/v1/chat", chatRoutes);
+app.route("/v1/messages", messagesRoutes);
 app.route("/v1/images", imagesRoutes);
 app.route("/v1/videos", videosRoutes);
 app.route("/v1/models", modelsRoutes);
