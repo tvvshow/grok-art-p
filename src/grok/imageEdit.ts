@@ -5,6 +5,8 @@
  * 1. Upload user image to https://grok.com/rest/app-chat/upload-file
  * 2. Use chat API with toolOverrides + modelConfigOverride for image editing
  * 3. Parse streaming response for generated image URLs
+ *
+ * Reference: github.com/chenyme/grok2api
  */
 
 import { getHeaders, buildCookie } from "./headers";
@@ -63,53 +65,34 @@ export async function uploadImage(
 }
 
 /**
- * Build the full Grok asset URL from upload result
+ * Recursively collect image URLs from response object.
+ * Looks for keys: generatedImageUrls, imageUrls, imageURLs
+ * (matches grok2api _collect_images behavior)
  */
-function buildAssetUrl(fileUri: string): string {
-  if (fileUri.startsWith("http")) return fileUri;
-  return `https://assets.grok.com/${fileUri.replace(/^\//, "")}`;
-}
+function collectImages(obj: unknown): string[] {
+  if (!obj || typeof obj !== "object") return [];
 
-/**
- * Extract image URLs from modelResponse text
- */
-function extractImageUrls(modelResponse: Record<string, unknown>): string[] {
   const urls: string[] = [];
+  const targetKeys = new Set(["generatedImageUrls", "imageUrls", "imageURLs"]);
 
-  // Check generatedImageEditUrls (structured field)
-  const editUrls = modelResponse.generatedImageEditUrls;
-  if (Array.isArray(editUrls)) {
-    for (const u of editUrls) {
-      if (typeof u === "string" && u.startsWith("http")) urls.push(u);
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      urls.push(...collectImages(item));
     }
+    return urls;
   }
 
-  // Check generatedAssets
-  const assets = modelResponse.generatedAssets;
-  if (Array.isArray(assets)) {
-    for (const asset of assets) {
-      const a = asset as Record<string, unknown>;
-      if (typeof a.url === "string") urls.push(a.url);
-      if (typeof a.imageUrl === "string") urls.push(a.imageUrl);
-    }
-  }
-
-  // Check imageAttachments
-  const attachments = modelResponse.imageAttachments;
-  if (Array.isArray(attachments)) {
-    for (const att of attachments) {
-      if (typeof att === "string" && att.startsWith("http")) urls.push(att);
-    }
-  }
-
-  // Fallback: extract URLs from outputText/message using regex
-  const textFields = ["outputText", "message", "text"];
-  for (const field of textFields) {
-    const text = modelResponse[field];
-    if (typeof text === "string") {
-      const pattern = /https?:\/\/[^\s<>"{}|\\^`\[\]]+\.(?:jpg|jpeg|png|gif|webp)/gi;
-      const matches = text.match(pattern);
-      if (matches) urls.push(...matches);
+  const record = obj as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    const val = record[key];
+    if (targetKeys.has(key) && Array.isArray(val)) {
+      for (const item of val) {
+        if (typeof item === "string" && item.startsWith("http")) {
+          urls.push(item);
+        }
+      }
+    } else if (val && typeof val === "object") {
+      urls.push(...collectImages(val));
     }
   }
 
@@ -126,19 +109,29 @@ export async function* streamImageEdit(
   ssoRw: string,
   prompt: string,
   imageUrls: string[],
-  imageCount: number = 4
+  imageCount: number = 2
 ): AsyncGenerator<ImageEditUpdate> {
   const cookie = buildCookie(sso, ssoRw);
   const headers = getHeaders(cookie);
 
-  const payload = {
+  // Payload structure matches grok2api AppChatReverse.build_payload()
+  const modelConfigOverride = {
+    modelMap: {
+      imageEditModel: "imagine",
+      imageEditModelConfig: {
+        imageReferences: imageUrls,
+      },
+    },
+  };
+
+  const payload: Record<string, unknown> = {
     temporary: true,
     modelName: "grok-3",
-    modelMode: "normal",
+    modelMode: null,
     message: prompt || "Generate new variations based on this image",
     fileAttachments: [],
     imageAttachments: [],
-    disableSearch: true,
+    disableSearch: false,
     enableImageGeneration: true,
     returnImageBytes: false,
     returnRawGrokInXaiRequest: false,
@@ -146,23 +139,25 @@ export async function* streamImageEdit(
     imageGenerationCount: imageCount,
     forceConcise: false,
     toolOverrides: { imageGen: true },
-    enableSideBySide: false,
+    enableSideBySide: true,
     sendFinalMetadata: true,
     isReasoning: false,
-    disableTextFollowUps: true,
+    disableTextFollowUps: false,
     disableMemory: true,
     forceSideBySide: false,
     isAsyncChat: false,
     disableSelfHarmShortCircuit: false,
+    deviceEnvInfo: {
+      darkModeEnabled: false,
+      devicePixelRatio: 2,
+      screenWidth: 2056,
+      screenHeight: 1329,
+      viewportWidth: 2056,
+      viewportHeight: 1083,
+    },
     responseMetadata: {
-      modelConfigOverride: {
-        modelMap: {
-          imageEditModel: "imagine",
-          imageEditModelConfig: {
-            imageReferences: imageUrls,
-          },
-        },
-      },
+      requestModelDetails: { modelId: "grok-3" },
+      modelConfigOverride,
     },
   };
 
@@ -229,10 +224,10 @@ export async function* streamImageEdit(
             continue;
           }
 
-          // Final modelResponse with image URLs
+          // Final modelResponse - recursively collect image URLs
           const modelResponse = resp.modelResponse;
           if (modelResponse) {
-            const urls = extractImageUrls(modelResponse);
+            const urls = collectImages(modelResponse);
             for (const url of urls) {
               if (!collectedUrls.includes(url)) {
                 collectedUrls.push(url);
