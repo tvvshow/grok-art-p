@@ -14,7 +14,13 @@
 - **标准接口** - 支持 `/v1/chat/completions`、`/v1/images/generations`、`/v1/models`
 - **多模型支持** - Grok 3/4/4.1 系列文本模型
 - **图片/视频生成** - 通过 Chat API 生成图片和视频
-- **Token 自动轮换** - 遇到速率限制自动切换账号重试
+- **Token 自动轮换** - 遇到速率限制自动切换账号重试（最多 5 次）
+
+### Anthropic 兼容 API
+- **标准接口** - 支持 `/v1/messages`，兼容 Claude Code CLI 及所有 Anthropic SDK 客户端
+- **双认证方式** - 支持 `Authorization: Bearer` 和 `x-api-key` 请求头
+- **模型自动映射** - Claude 模型名自动转换为对应 Grok 模型
+- **流式输出** - 完整实现 Anthropic SSE 事件格式
 
 ### 其他特性
 - **视频海报预览** - 视频返回可点击的海报预览图
@@ -37,6 +43,18 @@
 | `grok-4.1-fast` | Grok 4.1 快速模式 |
 | `grok-4.1-expert` | Grok 4.1 专家模式 |
 | `grok-4.1-thinking` | Grok 4.1 思维链模式 |
+
+### Claude 模型映射（Anthropic API 专用）
+
+通过 `/v1/messages` 接口时，Claude 模型名会自动映射为对应的 Grok 模型：
+
+| 客户端传入模型名 | 实际调用 Grok 模型 |
+|-----------------|------------------|
+| `claude-opus-*` | `grok-4-heavy` |
+| `claude-sonnet-*` | `grok-4` |
+| `claude-haiku-*` | `grok-4-fast` |
+| 其他 `claude-*` | `grok-4` |
+| `grok-4`、`grok-3` 等 | 直接透传 |
 
 ### 图片模型
 
@@ -73,35 +91,70 @@
 
 ### 步骤 2: 获取 Cloudflare 凭证
 
+**获取 Account ID：**
 1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com)
-2. 获取 **Account ID** (在 Workers 页面右侧可见)
-3. 创建 **API Token**:
-   - 进入 [API Tokens](https://dash.cloudflare.com/profile/api-tokens)
-   - 点击 **Create Token**
-   - 选择 **Edit Cloudflare Workers** 模板
-   - 确保包含权限: Workers Scripts Edit, Workers KV Edit, D1 Edit
+2. 点击左侧 **Workers & Pages**
+3. 右侧页面可看到 **Account ID**，复制保存
+
+**创建 API Token：**
+1. 进入 [API Tokens](https://dash.cloudflare.com/profile/api-tokens)
+2. 点击 **Create Token**
+3. 选择 **Edit Cloudflare Workers** 模板
+4. 确保包含以下权限：
+   - Workers Scripts: Edit
+   - Workers KV Storage: Edit
+   - D1: Edit
+5. 点击 **Continue to summary** → **Create Token**，复制保存
 
 ### 步骤 3: 配置 GitHub Secrets
 
-进入 Fork 的仓库 → **Settings** → **Secrets and variables** → **Actions**
+进入 Fork 的仓库 → **Settings** → **Secrets and variables** → **Actions** → **Secrets** 标签页
 
-| Secret 名称 | 说明 | 必填 |
-|-------------|------|------|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token | ✅ |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Account ID | ✅ |
-| `AUTH_USERNAME` | 后台登录用户名 | ✅ |
-| `AUTH_PASSWORD` | 后台登录密码 | ✅ |
+> ⚠️ 注意：必须添加到 **Secrets**（不是 Variables），否则部署会失败。
 
-### 步骤 4: 部署
+**首次部署必填：**
 
-1. 进入 **Actions** 标签页
-2. 点击 **Deploy to Cloudflare Workers**
-3. 点击 **Run workflow**
-4. 等待部署完成
+| Secret 名称 | 说明 | 获取方式 |
+|-------------|------|---------|
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token | 步骤 2 创建 |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Account ID | 步骤 2 获取 |
+| `AUTH_USERNAME` | 后台登录用户名（自定义） | 自定义 |
+| `AUTH_PASSWORD` | 后台登录密码（自定义） | 自定义 |
 
-### 步骤 5: 开始使用
+**首次部署后需补充（防止后续重复部署失败）：**
 
-部署完成后访问 `https://grok-art-proxy.<your-subdomain>.workers.dev`
+首次部署成功后，KV Namespace 和 D1 数据库已自动创建，需将它们的 ID 保存为 Secret，否则后续更新部署时会报错。
+
+| Secret 名称 | 说明 | 获取方式 |
+|-------------|------|---------|
+| `KV_NAMESPACE_ID` | KV Namespace ID | Cloudflare → Workers & Pages → KV → 复制对应 ID |
+| `D1_DATABASE_ID` | D1 数据库 ID | Cloudflare → Workers & Pages → D1 → 点击数据库 → 复制 Database ID |
+
+### 步骤 4: 首次部署
+
+1. 进入仓库 **Actions** 标签页
+2. 点击左侧 **Deploy to Cloudflare Workers**
+3. 点击 **Run workflow** → **Run workflow**
+4. 等待部署完成（约 2-3 分钟）
+
+### 步骤 5: 补充 KV 和 D1 Secret（重要）
+
+首次部署成功后，立即执行此步骤，避免后续部署失败：
+
+**获取 KV Namespace ID：**
+1. Cloudflare Dashboard → **Workers & Pages** → **KV**
+2. 找到名为 `KV_CACHE` 的 namespace，复制其 **Namespace ID**
+3. 添加到 GitHub Secrets：名称 `KV_NAMESPACE_ID`
+
+**获取 D1 Database ID：**
+1. Cloudflare Dashboard → **Workers & Pages** → **D1**
+2. 找到名为 `grok-art-proxy` 的数据库，点击进入
+3. 复制页面上的 **Database ID**
+4. 添加到 GitHub Secrets：名称 `D1_DATABASE_ID`
+
+### 步骤 6: 开始使用
+
+部署完成后访问：`https://grok-art-proxy.<your-subdomain>.workers.dev`
 
 ## Web 端使用
 
@@ -115,7 +168,7 @@
 2. 在文本框中粘贴 Token，支持多种格式：
    - 纯 SSO Token（每行一个）
    - JSON 数组格式
-   - CSV 格式: `sso,sso_rw,name`
+   - CSV 格式: `sso,sso_rw,user_id,cf_clearance,name`
 3. 点击 **导入数据**
 
 ### 生成图片
@@ -136,14 +189,16 @@
 
 ### 创建 API Key
 
-1. 进入 **API Key 管理** 页面
-2. 点击 **创建 API Key**
-3. 设置名称和速率限制（0 表示无限制）
-4. 复制生成的 API Key
+1. 进入 **API 密钥** 页面
+2. 填写密钥名称（可选）
+3. 点击 **创建密钥**
+4. **立即复制**生成的 API Key（关闭后无法再次查看）
 
 ## API 使用
 
-### 对话补全
+### OpenAI 兼容接口
+
+#### 对话补全
 
 ```bash
 curl https://your-worker.workers.dev/v1/chat/completions \
@@ -156,7 +211,7 @@ curl https://your-worker.workers.dev/v1/chat/completions \
   }'
 ```
 
-### 图片生成
+#### 图片生成
 
 ```bash
 curl https://your-worker.workers.dev/v1/chat/completions \
@@ -169,7 +224,7 @@ curl https://your-worker.workers.dev/v1/chat/completions \
   }'
 ```
 
-### 视频生成
+#### 视频生成
 
 ```bash
 curl https://your-worker.workers.dev/v1/chat/completions \
@@ -182,11 +237,56 @@ curl https://your-worker.workers.dev/v1/chat/completions \
   }'
 ```
 
-### 获取模型列表
+#### 获取模型列表
 
 ```bash
 curl https://your-worker.workers.dev/v1/models \
   -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Anthropic 兼容接口
+
+支持 Claude Code CLI 和所有 Anthropic SDK 客户端直接接入。
+
+#### Claude Code CLI 配置
+
+```bash
+# 设置环境变量（加入 ~/.bashrc 或 ~/.zshrc）
+export ANTHROPIC_BASE_URL=https://your-worker.workers.dev
+export ANTHROPIC_API_KEY=YOUR_API_KEY
+```
+
+#### curl 调用示例
+
+```bash
+curl https://your-worker.workers.dev/v1/messages \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 1024,
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "stream": true
+  }'
+```
+
+#### Python SDK
+
+```python
+import anthropic
+
+client = anthropic.Anthropic(
+    base_url="https://your-worker.workers.dev",
+    api_key="YOUR_API_KEY",
+)
+
+message = client.messages.create(
+    model="claude-sonnet-4-5",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(message.content[0].text)
 ```
 
 ## 环境变量
@@ -201,9 +301,10 @@ curl https://your-worker.workers.dev/v1/models \
 
 如果你之前已经部署过，更新到最新版本：
 
-1. 在 GitHub 上点击 **Sync fork** 同步最新代码
-2. 进入 **Actions** → **Deploy to Cloudflare Workers** → **Run workflow**
-3. 等待部署完成
+1. 确认已在 GitHub Secrets 中设置 `KV_NAMESPACE_ID` 和 `D1_DATABASE_ID`（见步骤 5）
+2. 在 GitHub 上点击 **Sync fork** 同步最新代码
+3. 进入 **Actions** → **Deploy to Cloudflare Workers** → **Run workflow**
+4. 等待部署完成
 
 数据库迁移会自动执行，原有数据不会丢失。
 
@@ -218,7 +319,7 @@ echo "AUTH_USERNAME=admin" > .dev.vars
 echo "AUTH_PASSWORD=password" >> .dev.vars
 
 # 创建本地数据库
-npx wrangler d1 create grok-imagine --local
+npx wrangler d1 create grok-art-proxy --local
 npx wrangler d1 migrations apply DB --local
 
 # 启动开发服务器
