@@ -582,12 +582,45 @@ app.post("/api/imagine/img2img", async (c) => {
             }
           } else if (update.type === "image") {
             imageCount++;
-            // Use proxy URL so browser can access Grok-hosted images
-            const proxiedUrl = `/api/imagine/proxy?url=${encodeURIComponent(update.url || "")}`;
+            const imgUrl = update.url || "";
+            // Fetch image server-side and encode as data URL (assets.grok.com needs auth)
+            let imageSrc = imgUrl;
+            try {
+              const imgCookie = buildCookie(token.sso, token.sso_rw);
+              const imgResp = await fetch(imgUrl, {
+                headers: {
+                  Cookie: imgCookie,
+                  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+                  Referer: "https://grok.com/",
+                },
+              });
+              if (imgResp.ok) {
+                const buf = await imgResp.arrayBuffer();
+                const bytes = new Uint8Array(buf);
+                let binary = "";
+                for (let i = 0; i < bytes.length; i++) {
+                  binary += String.fromCharCode(bytes[i]!);
+                }
+                const b64 = btoa(binary);
+                const ct = imgResp.headers.get("content-type") || "image/jpeg";
+                imageSrc = `data:${ct};base64,${b64}`;
+              } else {
+                await writeEvent("debug", {
+                  type: "debug",
+                  message: `img fetch ${imgResp.status} for ${imgUrl.slice(0, 80)}`,
+                });
+              }
+            } catch (imgErr) {
+              await writeEvent("debug", {
+                type: "debug",
+                message: `img fetch error: ${imgErr instanceof Error ? imgErr.message : String(imgErr)}`,
+              });
+            }
+
             await writeEvent("image", {
               type: "image",
-              url: update.url,
-              image_src: proxiedUrl,
+              url: imgUrl,
+              image_src: imageSrc,
               index: update.index,
               width: 0,
               height: 0,
@@ -664,20 +697,31 @@ app.get("/api/imagine/proxy", async (c) => {
   if (!token) return c.text("No tokens available", 503);
 
   const cookie = buildCookie(token.sso, token.sso_rw);
-  const headers = getHeaders(cookie);
 
-  const resp = await fetch(url, { headers });
-  if (!resp.ok) {
-    return c.text(`Fetch failed: ${resp.status}`, resp.status as 400);
+  try {
+    const resp = await fetch(url, {
+      headers: {
+        Cookie: cookie,
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+        Referer: "https://grok.com/",
+        Origin: "https://grok.com",
+      },
+    });
+
+    if (!resp.ok) {
+      return c.text(`Fetch failed: ${resp.status}`, 502);
+    }
+
+    const contentType = resp.headers.get("content-type") || "image/jpeg";
+    return new Response(resp.body, {
+      headers: {
+        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=86400",
+      },
+    });
+  } catch (e) {
+    return c.text(`Proxy error: ${e instanceof Error ? e.message : String(e)}`, 502);
   }
-
-  const contentType = resp.headers.get("content-type") || "image/jpeg";
-  return new Response(resp.body, {
-    headers: {
-      "Content-Type": contentType,
-      "Cache-Control": "public, max-age=86400",
-    },
-  });
 });
 
 export { app as imagineRoutes };
