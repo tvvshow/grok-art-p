@@ -282,27 +282,8 @@ Authorization: Bearer sk-xxxxxxxx</code></pre>
                         <input type="text" id="img2img-prompt" placeholder="描述你希望生成的效果，留空则仅基于参考图...">
                     </div>
                     <div class="form-group">
-                        <label>数量</label>
-                        <input type="number" id="img2img-count" value="6" min="1" max="6">
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>宽高比</label>
-                        <select id="img2img-aspect">
-                            <option value="1:1">1:1 (正方形)</option>
-                            <option value="2:3">2:3 (竖版)</option>
-                            <option value="3:2">3:2 (横版)</option>
-                            <option value="16:9">16:9 (宽屏)</option>
-                            <option value="9:16">9:16 (手机)</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>内容过滤</label>
-                        <select id="img2img-nsfw">
-                            <option value="true">允许 NSFW</option>
-                            <option value="false">安全模式</option>
-                        </select>
+                        <label>数量（最多4张）</label>
+                        <input type="number" id="img2img-count" value="4" min="1" max="4">
                     </div>
                 </div>
 

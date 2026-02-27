@@ -3,6 +3,7 @@ import type { Env } from "../env";
 import { getToken, getRandomToken, type TokenRow } from "../repo/tokens";
 import { generateImages, type StreamUpdate } from "../grok/imagine";
 import { generateVideo, type VideoUpdate } from "../grok/video";
+import { uploadImage, streamImageEdit, parseDataUrl } from "../grok/imageEdit";
 
 type HonoEnv = { Bindings: Env };
 
@@ -453,22 +454,30 @@ app.post("/api/imagine/scroll", async (c) => {
   });
 });
 
-// Image-to-image generation (SSE stream) with auto-retry on 429
+// Image-to-image generation (SSE stream) via Chat API + upload
 app.post("/api/imagine/img2img", async (c) => {
   const body = await c.req.json<{
     image_data: string;
     prompt?: string;
-    aspect_ratio?: string;
-    enable_nsfw?: boolean;
     count?: number;
     token_id?: string;
   }>();
 
-  const { image_data, prompt = "", aspect_ratio = "1:1", enable_nsfw = true, count = 6, token_id } = body;
+  const { image_data, prompt = "", count = 4, token_id } = body;
 
   if (!image_data) {
     return c.json({ error: "image_data is required" }, 400);
   }
+
+  // Parse the data URL
+  const parsed = parseDataUrl(image_data);
+  if (!parsed) {
+    return c.json({ error: "Invalid image_data: must be a base64 data URL" }, 400);
+  }
+
+  const { mimeType, base64Content } = parsed;
+  const ext = mimeType.split("/")[1] || "jpeg";
+  const fileName = `upload.${ext}`;
 
   // Stream SSE response
   const stream = new TransformStream();
@@ -484,10 +493,8 @@ app.post("/api/imagine/img2img", async (c) => {
   const backgroundTask = (async () => {
     const excludedTokenIds: string[] = [];
     let retryCount = 0;
-    let totalCollected = 0;
-    const targetCount = Math.min(count, 6);
 
-    while (retryCount < MAX_RETRIES && totalCollected < targetCount) {
+    while (retryCount < MAX_RETRIES) {
       let token: TokenRow | null = null;
 
       if (token_id && retryCount === 0) {
@@ -509,48 +516,84 @@ app.post("/api/imagine/img2img", async (c) => {
       }
 
       try {
-        for await (const update of generateImages(
+        // Step 1: Upload image to Grok
+        await writeEvent("progress", {
+          type: "progress",
+          status: "uploading",
+          message: "Uploading image to Grok...",
+          percentage: 10,
+        });
+
+        const uploadResult = await uploadImage(
+          token.sso,
+          token.sso_rw,
+          fileName,
+          mimeType,
+          base64Content
+        );
+
+        const imageUrl = uploadResult.fileUri.startsWith("http")
+          ? uploadResult.fileUri
+          : `https://assets.grok.com/${uploadResult.fileUri.replace(/^\//, "")}`;
+
+        await writeEvent("progress", {
+          type: "progress",
+          status: "generating",
+          message: "Generating images...",
+          percentage: 30,
+        });
+
+        // Step 2: Stream image edit via chat API
+        let imageCount = 0;
+
+        for await (const update of streamImageEdit(
           token.sso,
           token.sso_rw,
           prompt,
-          targetCount,
-          aspect_ratio,
-          enable_nsfw,
-          image_data
+          [imageUrl],
+          Math.min(count, 4)
         )) {
           if (update.type === "error") {
-            const msg = update.message;
+            const msg = update.message || "";
 
             if (msg.includes("429") || msg.includes("Rate limited")) {
               excludedTokenIds.push(token.id);
               retryCount++;
-
               await writeEvent("info", {
                 type: "info",
-                message: `Token rate limited, switching to another (attempt ${retryCount}/${MAX_RETRIES})`,
+                message: `Token rate limited, switching (attempt ${retryCount}/${MAX_RETRIES})`,
               });
               break;
             } else {
-              await writeEvent("error", update);
+              await writeEvent("error", { type: "error", message: msg });
               await writer.close();
               return;
             }
           } else if (update.type === "image") {
-            totalCollected++;
-            await writeEvent("image", update);
+            imageCount++;
+            await writeEvent("image", {
+              type: "image",
+              url: update.url,
+              image_src: update.url,
+              index: update.index,
+              width: 0,
+              height: 0,
+              prompt: prompt || "img2img",
+            });
 
             await writeEvent("progress", {
               type: "progress",
-              job_id: update.job_id,
               status: "collecting",
-              percentage: (totalCollected / targetCount) * 100,
-              completed_count: totalCollected,
-              target_count: targetCount,
+              percentage: 30 + (imageCount / Math.min(count, 4)) * 70,
+              completed_count: imageCount,
+              target_count: Math.min(count, 4),
             });
           } else if (update.type === "progress") {
-            if (update.status !== "collecting") {
-              await writeEvent("progress", update);
-            }
+            await writeEvent("progress", {
+              type: "progress",
+              status: "generating",
+              percentage: 30 + (update.progress || 0) * 0.4,
+            });
           } else if (update.type === "done") {
             await writeEvent("done", {});
             await writer.close();
@@ -563,10 +606,9 @@ app.post("/api/imagine/img2img", async (c) => {
         if (message.includes("429") || message.includes("Rate limited")) {
           excludedTokenIds.push(token.id);
           retryCount++;
-
           await writeEvent("info", {
             type: "info",
-            message: `Token rate limited, switching to another (attempt ${retryCount}/${MAX_RETRIES})`,
+            message: `Token rate limited, switching (attempt ${retryCount}/${MAX_RETRIES})`,
           });
           continue;
         } else {
@@ -576,9 +618,6 @@ app.post("/api/imagine/img2img", async (c) => {
       }
     }
 
-    if (totalCollected > 0) {
-      await writeEvent("done", {});
-    }
     await writer.close();
   })();
 

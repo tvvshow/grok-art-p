@@ -65,33 +65,28 @@ function buildRequest(
   prompt: string,
   aspectRatio: string,
   enableNsfw: boolean,
-  isScroll: boolean,
-  imageUrl?: string
+  isScroll: boolean
 ): Record<string, unknown> {
-  const contentItem: Record<string, unknown> = {
-    requestId: crypto.randomUUID(),
-    text: prompt,
-    type: isScroll ? "input_scroll" : "input_text",
-    properties: {
-      section_count: 0,
-      is_kids_mode: false,
-      enable_nsfw: enableNsfw,
-      skip_upsampler: false,
-      is_initial: false,
-      aspect_ratio: aspectRatio,
-    },
-  };
-
-  if (imageUrl) {
-    contentItem.attachments = [{ type: "image", url: imageUrl }];
-  }
-
   return {
     type: "conversation.item.create",
     timestamp: Date.now(),
     item: {
       type: "message",
-      content: [contentItem],
+      content: [
+        {
+          requestId: crypto.randomUUID(),
+          text: prompt,
+          type: isScroll ? "input_scroll" : "input_text",
+          properties: {
+            section_count: 0,
+            is_kids_mode: false,
+            enable_nsfw: enableNsfw,
+            skip_upsampler: false,
+            is_initial: false,
+            aspect_ratio: aspectRatio,
+          },
+        },
+      ],
     },
   };
 }
@@ -123,8 +118,7 @@ async function connectAndReceive(
   aspectRatio: string,
   enableNsfw: boolean,
   isScroll: boolean,
-  timeoutMs: number = 30000,
-  imageUrl?: string
+  timeoutMs: number = 30000
 ): Promise<ImageResult[]> {
   const cookie = buildCookie(sso, sso_rw);
   const headers = getWebSocketHeaders(cookie);
@@ -145,7 +139,7 @@ async function connectAndReceive(
   ws.accept();
 
   // Send request immediately after accept (connection is already open)
-  const request = buildRequest(prompt, aspectRatio, enableNsfw, isScroll, imageUrl);
+  const request = buildRequest(prompt, aspectRatio, enableNsfw, isScroll);
   ws.send(JSON.stringify(request));
 
   return new Promise((resolve, reject) => {
@@ -256,12 +250,10 @@ export async function* generateImages(
   prompt: string,
   count: number,
   aspectRatio: string,
-  enableNsfw: boolean,
-  imageUrl?: string
+  enableNsfw: boolean
 ): AsyncGenerator<StreamUpdate> {
   const collectedJobs = new Set<string>();
-  // For img2img, only do one page (no scrolling)
-  const maxPages = imageUrl ? 1 : Math.ceil(count / 6) + 2;
+  const maxPages = Math.ceil(count / 6) + 2;
 
   yield {
     type: "progress",
@@ -285,8 +277,7 @@ export async function* generateImages(
         aspectRatio,
         enableNsfw,
         isScroll,
-        30000,
-        imageUrl
+        30000
       );
 
       for (const img of images) {

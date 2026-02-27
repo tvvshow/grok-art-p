@@ -93,14 +93,12 @@ async function startGeneration() {
     if (isLoading) return;
 
     const prompt = document.getElementById('img2img-prompt').value.trim();
-    const aspect = document.getElementById('img2img-aspect').value;
-    const nsfw = document.getElementById('img2img-nsfw').value === 'true';
-    const count = parseInt(document.getElementById('img2img-count').value) || 6;
+    const count = parseInt(document.getElementById('img2img-count').value) || 4;
 
     // Reset UI
     document.getElementById('img2img-grid').innerHTML = '';
     clearLog('img2img-log');
-    setLoading(true, '正在生成...');
+    setLoading(true, '正在上传图片...');
     log('img2img-log', `图生图中 [目标: ${count}张]`);
 
     const loadedUrls = new Set();
@@ -108,12 +106,13 @@ async function startGeneration() {
     await readStream('/api/imagine/img2img', {
         image_data: imageData,
         prompt,
-        aspect_ratio: aspect,
-        enable_nsfw: nsfw,
         count
     }, {
         onProgress: (data) => {
             updateProgress(data.percentage);
+            if (data.message) {
+                setLoading(true, data.message);
+            }
         },
         onData: (data) => {
             if (data.type === 'image' && !loadedUrls.has(data.url || data.image_src)) {
