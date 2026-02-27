@@ -13,6 +13,7 @@ import { getHeaders, buildCookie } from "./headers";
 
 const UPLOAD_API = "https://grok.com/rest/app-chat/upload-file";
 const CHAT_API = "https://grok.com/rest/app-chat/conversations/new";
+const MEDIA_POST_API = "https://grok.com/rest/media/post/create";
 
 export interface ImageEditUpdate {
   type: "progress" | "image" | "error" | "done" | "debug";
@@ -66,6 +67,49 @@ export async function uploadImage(
 }
 
 /**
+ * Create a media post for the uploaded image.
+ * Returns the parentPostId needed for image editing.
+ * Falls back to extracting UUID from fileUri if API call fails.
+ */
+export async function createMediaPost(
+  sso: string,
+  ssoRw: string,
+  imageUrl: string,
+  fileUri: string
+): Promise<string> {
+  const cookie = buildCookie(sso, ssoRw);
+  const headers = getHeaders(cookie);
+
+  try {
+    const response = await fetch(MEDIA_POST_API, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        mediaType: "MEDIA_POST_TYPE_IMAGE",
+        mediaUrl: imageUrl,
+      }),
+    });
+
+    if (response.ok) {
+      const data = (await response.json()) as { post?: { id?: string } };
+      if (data?.post?.id) {
+        return data.post.id;
+      }
+    }
+  } catch {
+    // Fall through to fallback
+  }
+
+  // Fallback: extract UUID from fileUri pattern users/{userId}/{uuid}/content
+  const match = fileUri.match(/users\/[^/]+\/([a-f0-9-]+)\/content/);
+  if (match?.[1]) {
+    return match[1];
+  }
+
+  return "";
+}
+
+/**
  * Recursively collect image URLs from response object.
  * Looks for keys: generatedImageUrls, imageUrls, imageURLs
  * (matches grok2api _collect_images behavior)
@@ -115,18 +159,24 @@ export async function* streamImageEdit(
   ssoRw: string,
   prompt: string,
   imageUrls: string[],
-  imageCount: number = 2
+  imageCount: number = 2,
+  parentPostId?: string
 ): AsyncGenerator<ImageEditUpdate> {
   const cookie = buildCookie(sso, ssoRw);
   const headers = getHeaders(cookie);
 
   // Payload structure matches grok2api AppChatReverse.build_payload()
+  const imageEditModelConfig: Record<string, unknown> = {
+    imageReferences: imageUrls,
+  };
+  if (parentPostId) {
+    imageEditModelConfig.parentPostId = parentPostId;
+  }
+
   const modelConfigOverride = {
     modelMap: {
       imageEditModel: "imagine",
-      imageEditModelConfig: {
-        imageReferences: imageUrls,
-      },
+      imageEditModelConfig,
     },
   };
 

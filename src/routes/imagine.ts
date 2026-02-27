@@ -3,7 +3,7 @@ import type { Env } from "../env";
 import { getToken, getRandomToken, type TokenRow } from "../repo/tokens";
 import { generateImages, type StreamUpdate } from "../grok/imagine";
 import { generateVideo, type VideoUpdate } from "../grok/video";
-import { uploadImage, streamImageEdit, parseDataUrl } from "../grok/imageEdit";
+import { uploadImage, streamImageEdit, parseDataUrl, createMediaPost } from "../grok/imageEdit";
 import { getHeaders, buildCookie } from "../grok/headers";
 
 type HonoEnv = { Bindings: Env };
@@ -547,6 +547,19 @@ app.post("/api/imagine/img2img", async (c) => {
           message: `constructed URL: ${imageUrl}`,
         });
 
+        // Step 2: Create media post to get parentPostId
+        const parentPostId = await createMediaPost(
+          token.sso,
+          token.sso_rw,
+          imageUrl,
+          uploadResult.fileUri
+        );
+
+        await writeEvent("debug", {
+          type: "debug",
+          message: `parentPostId: ${parentPostId || "(empty)"}`,
+        });
+
         await writeEvent("progress", {
           type: "progress",
           status: "generating",
@@ -554,7 +567,7 @@ app.post("/api/imagine/img2img", async (c) => {
           percentage: 30,
         });
 
-        // Step 2: Stream image edit via chat API
+        // Step 3: Stream image edit via chat API
         let imageCount = 0;
 
         for await (const update of streamImageEdit(
@@ -562,7 +575,8 @@ app.post("/api/imagine/img2img", async (c) => {
           token.sso_rw,
           prompt,
           [imageUrl],
-          Math.min(count, 4)
+          Math.min(count, 4),
+          parentPostId
         )) {
           if (update.type === "error") {
             const msg = update.message || "";
