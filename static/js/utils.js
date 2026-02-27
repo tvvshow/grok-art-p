@@ -66,7 +66,7 @@ export async function api(url, method = 'GET', body = null) {
 
 // SSE Stream Reader for custom POST-based streams
 export async function readStream(url, body, callbacks) {
-    const { onProgress, onData, onInfo, onError, onDone } = callbacks;
+    const { onProgress, onData, onInfo, onError, onDone, onDebug } = callbacks;
 
     try {
         const response = await fetch(url, {
@@ -134,6 +134,9 @@ export async function readStream(url, body, callbacks) {
                             case 'done':
                                 if (onDone) onDone(data);
                                 return; // Stop processing
+                            case 'debug':
+                                if (onDebug) onDebug(data);
+                                break;
                         }
                     } catch (e) {
                         console.warn('解析 SSE 数据失败:', line, e);

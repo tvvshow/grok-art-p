@@ -532,9 +532,19 @@ app.post("/api/imagine/img2img", async (c) => {
           base64Content
         );
 
+        await writeEvent("debug", {
+          type: "debug",
+          message: `upload result: id=${uploadResult.fileMetadataId}, uri=${uploadResult.fileUri}`,
+        });
+
         const imageUrl = uploadResult.fileUri.startsWith("http")
           ? uploadResult.fileUri
           : `https://assets.grok.com/${uploadResult.fileUri.replace(/^\//, "")}`;
+
+        await writeEvent("debug", {
+          type: "debug",
+          message: `constructed URL: ${imageUrl}`,
+        });
 
         await writeEvent("progress", {
           type: "progress",
@@ -551,7 +561,10 @@ app.post("/api/imagine/img2img", async (c) => {
           token.sso_rw,
           prompt,
           [imageUrl],
-          Math.min(count, 4)
+          Math.min(count, 4),
+          uploadResult.fileMetadataId,
+          fileName,
+          mimeType
         )) {
           if (update.type === "error") {
             const msg = update.message || "";
@@ -598,6 +611,8 @@ app.post("/api/imagine/img2img", async (c) => {
             await writeEvent("done", {});
             await writer.close();
             return;
+          } else if (update.type === "debug") {
+            await writeEvent("debug", { type: "debug", message: update.message });
           }
         }
       } catch (e) {

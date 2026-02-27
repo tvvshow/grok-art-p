@@ -15,7 +15,7 @@ const UPLOAD_API = "https://grok.com/rest/app-chat/upload-file";
 const CHAT_API = "https://grok.com/rest/app-chat/conversations/new";
 
 export interface ImageEditUpdate {
-  type: "progress" | "image" | "error" | "done";
+  type: "progress" | "image" | "error" | "done" | "debug";
   message?: string;
   url?: string;
   index?: number;
@@ -56,9 +56,10 @@ export async function uploadImage(
     throw new Error(`Upload failed (${response.status}): ${text.slice(0, 200)}`);
   }
 
-  const result = (await response.json()) as UploadResult;
+  const raw = await response.json();
+  const result = raw as UploadResult;
   if (!result.fileMetadataId && !result.fileUri) {
-    throw new Error("Upload returned empty result");
+    throw new Error(`Upload returned empty result: ${JSON.stringify(raw).slice(0, 500)}`);
   }
 
   return result;
@@ -109,7 +110,10 @@ export async function* streamImageEdit(
   ssoRw: string,
   prompt: string,
   imageUrls: string[],
-  imageCount: number = 2
+  imageCount: number = 2,
+  fileMetadataId?: string,
+  fileName?: string,
+  fileMimeType?: string
 ): AsyncGenerator<ImageEditUpdate> {
   const cookie = buildCookie(sso, ssoRw);
   const headers = getHeaders(cookie);
@@ -124,12 +128,22 @@ export async function* streamImageEdit(
     },
   };
 
+  // Include file in fileAttachments if metadata is available
+  const fileAttachments: unknown[] = [];
+  if (fileMetadataId) {
+    fileAttachments.push({
+      fileMetadataId,
+      fileName: fileName || "upload.jpg",
+      fileMimeType: fileMimeType || "image/jpeg",
+    });
+  }
+
   const payload: Record<string, unknown> = {
     temporary: true,
     modelName: "grok-3",
     modelMode: null,
     message: prompt || "Generate new variations based on this image",
-    fileAttachments: [],
+    fileAttachments,
     imageAttachments: [],
     disableSearch: false,
     enableImageGeneration: true,
@@ -161,6 +175,8 @@ export async function* streamImageEdit(
     },
   };
 
+  yield { type: "debug", message: `imageRefs: ${JSON.stringify(imageUrls)}` };
+
   let response: Response;
   try {
     response = await fetch(CHAT_API, {
@@ -173,9 +189,12 @@ export async function* streamImageEdit(
     return;
   }
 
+  yield { type: "debug", message: `Chat API status: ${response.status}` };
+
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     const status = response.status;
+    yield { type: "debug", message: `Chat API error body: ${text.slice(0, 500)}` };
     if (status === 429) {
       yield { type: "error", message: "Rate limited (429)" };
     } else {
@@ -193,6 +212,7 @@ export async function* streamImageEdit(
   const decoder = new TextDecoder();
   let buffer = "";
   const collectedUrls: string[] = [];
+  let lineCount = 0;
 
   try {
     while (true) {
@@ -205,10 +225,18 @@ export async function* streamImageEdit(
 
       for (const line of lines) {
         if (!line.trim()) continue;
+        lineCount++;
 
         try {
           const data = JSON.parse(line);
           const resp = data?.result?.response;
+
+          // Debug: log first few lines and any line with interesting keys
+          if (lineCount <= 3) {
+            const keys = resp ? Object.keys(resp).join(",") : "no-resp";
+            yield { type: "debug", message: `line#${lineCount} resp-keys: [${keys}]` };
+          }
+
           if (!resp) continue;
 
           // Image generation progress
@@ -227,7 +255,12 @@ export async function* streamImageEdit(
           // Final modelResponse - recursively collect image URLs
           const modelResponse = resp.modelResponse;
           if (modelResponse) {
+            yield { type: "debug", message: `modelResponse keys: [${Object.keys(modelResponse).join(",")}]` };
             const urls = collectImages(modelResponse);
+            yield { type: "debug", message: `collectImages found ${urls.length} urls` };
+            if (urls.length > 0) {
+              yield { type: "debug", message: `first url: ${urls[0]!.slice(0, 100)}` };
+            }
             for (const url of urls) {
               if (!collectedUrls.includes(url)) {
                 collectedUrls.push(url);
@@ -239,8 +272,25 @@ export async function* streamImageEdit(
               }
             }
           }
+
+          // Also check for images directly in resp (not nested in modelResponse)
+          const directUrls = collectImages(resp);
+          for (const url of directUrls) {
+            if (!collectedUrls.includes(url)) {
+              collectedUrls.push(url);
+              yield { type: "debug", message: `found url in resp (not modelResponse): ${url.slice(0, 100)}` };
+              yield {
+                type: "image",
+                url,
+                index: collectedUrls.length - 1,
+              };
+            }
+          }
         } catch {
-          // Skip invalid JSON
+          // Log first unparseable line
+          if (lineCount <= 2) {
+            yield { type: "debug", message: `unparseable line#${lineCount}: ${line.slice(0, 200)}` };
+          }
         }
       }
     }
@@ -248,8 +298,10 @@ export async function* streamImageEdit(
     reader.releaseLock();
   }
 
+  yield { type: "debug", message: `stream done. ${lineCount} lines, ${collectedUrls.length} images` };
+
   if (collectedUrls.length === 0) {
-    yield { type: "error", message: "No images generated" };
+    yield { type: "error", message: `No images generated (parsed ${lineCount} lines)` };
     return;
   }
 

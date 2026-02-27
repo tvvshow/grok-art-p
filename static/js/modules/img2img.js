@@ -121,6 +121,7 @@ async function startGeneration() {
             }
         },
         onInfo: (data) => log('img2img-log', `信息: ${data.message}`),
+        onDebug: (data) => log('img2img-log', `[DBG] ${data.message}`, 'debug'),
         onError: (msg) => {
             log('img2img-log', `错误: ${msg}`, 'error');
             setLoading(false);
