@@ -4,6 +4,7 @@ import { getToken, getRandomToken, type TokenRow } from "../repo/tokens";
 import { generateImages, type StreamUpdate } from "../grok/imagine";
 import { generateVideo, type VideoUpdate } from "../grok/video";
 import { uploadImage, streamImageEdit, parseDataUrl } from "../grok/imageEdit";
+import { getHeaders, buildCookie } from "../grok/headers";
 
 type HonoEnv = { Bindings: Env };
 
@@ -581,10 +582,12 @@ app.post("/api/imagine/img2img", async (c) => {
             }
           } else if (update.type === "image") {
             imageCount++;
+            // Use proxy URL so browser can access Grok-hosted images
+            const proxiedUrl = `/api/imagine/proxy?url=${encodeURIComponent(update.url || "")}`;
             await writeEvent("image", {
               type: "image",
               url: update.url,
-              image_src: update.url,
+              image_src: proxiedUrl,
               index: update.index,
               width: 0,
               height: 0,
@@ -643,6 +646,36 @@ app.post("/api/imagine/img2img", async (c) => {
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
+    },
+  });
+});
+
+// Image proxy — fetches Grok-hosted images with auth cookies
+app.get("/api/imagine/proxy", async (c) => {
+  const url = c.req.query("url");
+  if (!url) return c.text("Missing url parameter", 400);
+
+  // Only allow proxying assets.grok.com URLs
+  if (!url.startsWith("https://assets.grok.com/")) {
+    return c.text("Invalid URL", 400);
+  }
+
+  const token = await getRandomToken(c.env.DB, []);
+  if (!token) return c.text("No tokens available", 503);
+
+  const cookie = buildCookie(token.sso, token.sso_rw);
+  const headers = getHeaders(cookie);
+
+  const resp = await fetch(url, { headers });
+  if (!resp.ok) {
+    return c.text(`Fetch failed: ${resp.status}`, resp.status as 400);
+  }
+
+  const contentType = resp.headers.get("content-type") || "image/jpeg";
+  return new Response(resp.body, {
+    headers: {
+      "Content-Type": contentType,
+      "Cache-Control": "public, max-age=86400",
     },
   });
 });
