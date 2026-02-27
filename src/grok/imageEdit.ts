@@ -110,10 +110,7 @@ export async function* streamImageEdit(
   ssoRw: string,
   prompt: string,
   imageUrls: string[],
-  imageCount: number = 2,
-  fileMetadataId?: string,
-  fileName?: string,
-  fileMimeType?: string
+  imageCount: number = 2
 ): AsyncGenerator<ImageEditUpdate> {
   const cookie = buildCookie(sso, ssoRw);
   const headers = getHeaders(cookie);
@@ -128,22 +125,12 @@ export async function* streamImageEdit(
     },
   };
 
-  // Include file in fileAttachments if metadata is available
-  const fileAttachments: unknown[] = [];
-  if (fileMetadataId) {
-    fileAttachments.push({
-      fileMetadataId,
-      fileName: fileName || "upload.jpg",
-      fileMimeType: fileMimeType || "image/jpeg",
-    });
-  }
-
   const payload: Record<string, unknown> = {
     temporary: true,
     modelName: "grok-3",
     modelMode: null,
     message: prompt || "Generate new variations based on this image",
-    fileAttachments,
+    fileAttachments: [],
     imageAttachments: [],
     disableSearch: false,
     enableImageGeneration: true,

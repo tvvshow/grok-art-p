@@ -561,10 +561,7 @@ app.post("/api/imagine/img2img", async (c) => {
           token.sso_rw,
           prompt,
           [imageUrl],
-          Math.min(count, 4),
-          uploadResult.fileMetadataId,
-          fileName,
-          mimeType
+          Math.min(count, 4)
         )) {
           if (update.type === "error") {
             const msg = update.message || "";
