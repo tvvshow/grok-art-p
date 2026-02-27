@@ -80,9 +80,9 @@ jobs:
             KV_ID="${{ steps.create-kv.outputs.kv_id }}"
           fi
 
-          # If still empty, try to find existing namespace
+          # If still empty, try to find existing namespace (title may have worker-name prefix)
           if [ -z "$KV_ID" ]; then
-            KV_ID=$(npx wrangler kv namespace list --json 2>/dev/null | jq -r '.[] | select(.title=="KV_CACHE") | .id' || echo "")
+            KV_ID=$(npx wrangler kv namespace list --json 2>/dev/null | jq -r '.[] | select(.title | test("KV_CACHE")) | .id' | head -1 || echo "")
           fi
 
           echo "d1_id=$D1_ID" >> $GITHUB_OUTPUT
