@@ -74,7 +74,7 @@ function collectImages(obj: unknown): string[] {
   if (!obj || typeof obj !== "object") return [];
 
   const urls: string[] = [];
-  const targetKeys = new Set(["generatedImageUrls", "imageUrls", "imageURLs"]);
+  const targetKeys = new Set(["generatedImageUrls", "imageUrls", "imageURLs", "imageEditUris", "fileUris"]);
 
   if (Array.isArray(obj)) {
     for (const item of obj) {
@@ -88,8 +88,13 @@ function collectImages(obj: unknown): string[] {
     const val = record[key];
     if (targetKeys.has(key) && Array.isArray(val)) {
       for (const item of val) {
-        if (typeof item === "string" && item.startsWith("http")) {
-          urls.push(item);
+        if (typeof item === "string" && item.length > 0) {
+          if (item.startsWith("http")) {
+            urls.push(item);
+          } else if (item.startsWith("/") || item.startsWith("users/")) {
+            // Relative URI — construct full URL
+            urls.push(`https://assets.grok.com/${item.replace(/^\//, "")}`);
+          }
         }
       }
     } else if (val && typeof val === "object") {
@@ -242,7 +247,13 @@ export async function* streamImageEdit(
           // Final modelResponse - recursively collect image URLs
           const modelResponse = resp.modelResponse;
           if (modelResponse) {
-            yield { type: "debug", message: `modelResponse keys: [${Object.keys(modelResponse).join(",")}]` };
+            // Debug: show values of key image fields
+            const mr = modelResponse as Record<string, unknown>;
+            for (const k of ["generatedImageUrls", "imageEditUris", "fileUris", "imageUrls"]) {
+              if (mr[k] !== undefined && mr[k] !== null) {
+                yield { type: "debug", message: `${k}: ${JSON.stringify(mr[k]).slice(0, 300)}` };
+              }
+            }
             const urls = collectImages(modelResponse);
             yield { type: "debug", message: `collectImages found ${urls.length} urls` };
             if (urls.length > 0) {
