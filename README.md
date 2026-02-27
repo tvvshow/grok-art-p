@@ -123,12 +123,11 @@
 
 **首次部署后需补充（防止后续重复部署失败）：**
 
-首次部署成功后，KV Namespace 和 D1 数据库已自动创建，需将它们的 ID 保存为 Secret，否则后续更新部署时会报错。
+首次部署成功后，KV Namespace 已自动创建，需将其 ID 保存为 Secret，否则后续更新部署时会报错。
 
 | Secret 名称 | 说明 | 获取方式 |
 |-------------|------|---------|
 | `KV_NAMESPACE_ID` | KV Namespace ID | Cloudflare → Workers & Pages → KV → 复制对应 ID |
-| `D1_DATABASE_ID` | D1 数据库 ID | Cloudflare → Workers & Pages → D1 → 点击数据库 → 复制 Database ID |
 
 ### 步骤 4: 首次部署
 
@@ -137,7 +136,7 @@
 3. 点击 **Run workflow** → **Run workflow**
 4. 等待部署完成（约 2-3 分钟）
 
-### 步骤 5: 补充 KV 和 D1 Secret（重要）
+### 步骤 5: 补充 KV Secret（重要）
 
 首次部署成功后，立即执行此步骤，避免后续部署失败：
 
@@ -145,12 +144,6 @@
 1. Cloudflare Dashboard → **Workers & Pages** → **KV**
 2. 找到名为 `KV_CACHE` 的 namespace，复制其 **Namespace ID**
 3. 添加到 GitHub Secrets：名称 `KV_NAMESPACE_ID`
-
-**获取 D1 Database ID：**
-1. Cloudflare Dashboard → **Workers & Pages** → **D1**
-2. 找到名为 `grok-art-proxy` 的数据库，点击进入
-3. 复制页面上的 **Database ID**
-4. 添加到 GitHub Secrets：名称 `D1_DATABASE_ID`
 
 ### 步骤 6: 开始使用
 
