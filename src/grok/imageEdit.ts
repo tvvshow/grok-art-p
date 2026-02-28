@@ -179,15 +179,22 @@ export async function* streamImageEdit(
       imageEditModel: "imagine",
       imageEditModelConfig,
     },
+    imageEditModel: "imagine", // Also needed at top level for some versions
   };
 
   const payload: Record<string, unknown> = {
     temporary: true,
-    modelName: "grok-3",
+    modelName: "grok-3-image-generation",
     modelMode: null,
     message: prompt || "Generate new variations based on this image",
     fileAttachments: fileMetadataId ? [fileMetadataId] : [],
-    imageAttachments: fileMetadataId ? [fileMetadataId] : [],
+    imageAttachments: fileMetadataId ? [
+      {
+        fileName: "image.png",
+        fileMetadataId: fileMetadataId,
+        fileMimeType: "image/png"
+      }
+    ] : [],
     disableSearch: false,
     enableImageGeneration: true,
     returnImageBytes: false,
@@ -213,12 +220,14 @@ export async function* streamImageEdit(
       viewportHeight: 1083,
     },
     responseMetadata: {
-      requestModelDetails: { modelId: "grok-3" },
+      requestModelDetails: { modelId: "grok-3-image-generation" },
       modelConfigOverride,
     },
   };
 
   yield { type: "debug", message: `imageRefs: ${JSON.stringify(imageUrls)}` };
+  yield { type: "debug", message: `payload.imageAttachments: ${JSON.stringify(payload.imageAttachments)}` };
+  yield { type: "debug", message: `payload.modelConfigOverride: ${JSON.stringify(modelConfigOverride)}` };
 
   let response: Response;
   try {
