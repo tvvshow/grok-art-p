@@ -158,7 +158,7 @@ export async function* streamImageEdit(
   ssoRw: string,
   prompt: string,
   imageUrls: string[],
-  imageCount: number = 2,
+  imageCount: number = 1,
   parentPostId?: string,
   fileMetadataId?: string
 ): AsyncGenerator<ImageEditUpdate> {

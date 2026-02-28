@@ -464,7 +464,7 @@ app.post("/api/imagine/img2img", async (c) => {
     token_id?: string;
   }>();
 
-  const { image_data, prompt = "", count = 4, token_id } = body;
+  const { image_data, prompt = "", count = 1, token_id } = body;
 
   if (!image_data) {
     return c.json({ error: "image_data is required" }, 400);
@@ -601,8 +601,7 @@ app.post("/api/imagine/img2img", async (c) => {
 
             // Transform to proxy URL if needed
             if (imgUrl.startsWith("https://assets.grok.com/")) {
-              const path = imgUrl.replace("https://assets.grok.com/", "");
-              imgUrl = `/api/proxy/assets/${path}`;
+              imgUrl = `/api/imagine/proxy?url=${encodeURIComponent(imgUrl)}`;
             }
 
             await writeEvent("image", {
