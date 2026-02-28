@@ -599,9 +599,11 @@ app.post("/api/imagine/img2img", async (c) => {
             imageCount++;
             let imgUrl = update.url || "";
 
-            // Keep raw assets.grok.com URL — these are CDN-served images
-            // (proxying with a different token fails because generated images
-            //  are only accessible by the token that generated them)
+            // Proxy with the same token that generated the image —
+            // assets.grok.com/users/.../generated/... requires the generating user's auth
+            if (imgUrl.startsWith("https://assets.grok.com/")) {
+              imgUrl = `/api/imagine/proxy?url=${encodeURIComponent(imgUrl)}&token_id=${encodeURIComponent(token.id)}`;
+            }
 
             await writeEvent("image", {
               type: "image",
@@ -678,7 +680,15 @@ app.get("/api/imagine/proxy", async (c) => {
     return c.text("Invalid URL", 400);
   }
 
-  const token = await getRandomToken(c.env.DB, []);
+  // Prefer specified token (e.g. the one that generated the image)
+  const tokenId = c.req.query("token_id");
+  let token;
+  if (tokenId) {
+    token = await getToken(c.env.DB, tokenId);
+  }
+  if (!token) {
+    token = await getRandomToken(c.env.DB, []);
+  }
   if (!token) return c.text("No tokens available", 503);
 
   const cookie = buildCookie(token.sso, token.sso_rw);
