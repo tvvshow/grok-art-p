@@ -188,7 +188,13 @@ export async function* streamImageEdit(
     modelMode: null,
     message: prompt || "Generate new variations based on this image",
     fileAttachments: [],
-    imageAttachments: fileMetadataId ? [fileMetadataId] : [],
+    imageAttachments: fileMetadataId ? [
+      {
+        fileName: "image.png",
+        fileMetadataId: fileMetadataId,
+        fileMimeType: "image/png"
+      }
+    ] : [],
     disableSearch: false,
     enableImageGeneration: true,
     returnImageBytes: false,
@@ -309,18 +315,16 @@ export async function* streamImageEdit(
           // Final modelResponse - recursively collect image URLs
           const modelResponse = resp.modelResponse;
           if (modelResponse) {
-            // Debug: show values of key image fields
-            const mr = modelResponse as Record<string, unknown>;
-            for (const k of ["generatedImageUrls", "imageEditUris", "fileUris", "imageUrls"]) {
-              if (mr[k] !== undefined && mr[k] !== null) {
-                yield { type: "debug", message: `${k}: ${JSON.stringify(mr[k]).slice(0, 300)}` };
+            const urls = collectImages(modelResponse);
+            
+            // Also check for manually constructed imageEditUris in modelConfigOverride
+            if (urls.length === 0 && modelResponse.responseMetadata?.modelConfigOverride) {
+              const override = modelResponse.responseMetadata.modelConfigOverride;
+              if (override.modelMap?.imageEditModelConfig?.imageEditUris) {
+                urls.push(...collectImages(override.modelMap.imageEditModelConfig.imageEditUris));
               }
             }
-            const urls = collectImages(modelResponse);
-            yield { type: "debug", message: `collectImages found ${urls.length} urls` };
-            if (urls.length > 0) {
-              yield { type: "debug", message: `first url: ${urls[0]!.slice(0, 100)}` };
-            }
+            
             for (const url of urls) {
               if (!collectedUrls.includes(url)) {
                 collectedUrls.push(url);
