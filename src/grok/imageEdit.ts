@@ -188,13 +188,7 @@ export async function* streamImageEdit(
     modelMode: null,
     message: prompt || "Generate new variations based on this image",
     fileAttachments: [],
-    imageAttachments: fileMetadataId ? [
-      {
-        fileName: "image.png",
-        fileMetadataId: fileMetadataId,
-        fileMimeType: "image/png"
-      }
-    ] : [],
+    imageAttachments: fileMetadataId ? [fileMetadataId] : [],
     disableSearch: false,
     enableImageGeneration: true,
     returnImageBytes: false,
