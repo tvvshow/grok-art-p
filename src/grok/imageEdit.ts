@@ -188,8 +188,8 @@ export async function* streamImageEdit(
     modelMode: null,
     message: prompt || "Generate new variations based on this image",
     fileAttachments: [],
-    imageAttachments: fileMetadataId ? [fileMetadataId] : [],
-    disableSearch: false,
+    imageAttachments: [], // Empty to trigger edit mode via config override
+    disableSearch: true,
     enableImageGeneration: true,
     returnImageBytes: false,
     returnRawGrokInXaiRequest: false,
