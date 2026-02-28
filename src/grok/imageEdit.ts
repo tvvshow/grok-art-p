@@ -85,8 +85,7 @@ export async function createMediaPost(
       method: "POST",
       headers,
       body: JSON.stringify({
-        mediaType: "MEDIA_POST_TYPE_IMAGE",
-        mediaUrl: imageUrl,
+        media_url: imageUrl,
       }),
     });
 
@@ -164,10 +163,12 @@ export async function* streamImageEdit(
   fileMetadataId?: string
 ): AsyncGenerator<ImageEditUpdate> {
   const cookie = buildCookie(sso, ssoRw);
-  const headers = getHeaders(cookie);
+  // Use imagine page as Referer (same as video.ts) to signal imagine context.
+  // parentPostId from createMediaPost, or fall back to fileMetadataId.
+  const refPostId = parentPostId || fileMetadataId;
+  const referer = refPostId ? `https://grok.com/imagine/post/${refPostId}` : undefined;
+  const headers = getHeaders(cookie, referer);
 
-  // Mirror grok2api _build_payload: fileAttachments + enableImageGeneration, no modelConfigOverride.
-  // modelConfigOverride causes Grok to do web search instead of image generation.
   const payload: Record<string, unknown> = {
     temporary: true,
     modelName: "grok-3",
@@ -181,7 +182,7 @@ export async function* streamImageEdit(
     enableImageStreaming: true,
     imageGenerationCount: imageCount,
     forceConcise: false,
-    toolOverrides: {},
+    toolOverrides: { imageGen: true },
     enableSideBySide: true,
     sendFinalMetadata: true,
     isReasoning: false,
@@ -194,6 +195,7 @@ export async function* streamImageEdit(
     responseMetadata: { requestModelDetails: { modelId: "grok-3" } },
   };
 
+  yield { type: "debug", message: `referer: ${referer || "(default)"}` };
   yield { type: "debug", message: `fileMetadataId: ${fileMetadataId || "(none)"}` };
   yield { type: "debug", message: `parentPostId: ${parentPostId || "(none)"}` };
   yield { type: "debug", message: `payload.fileAttachments: ${JSON.stringify(payload.fileAttachments)}` };
