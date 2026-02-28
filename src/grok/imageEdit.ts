@@ -187,7 +187,7 @@ export async function* streamImageEdit(
     modelName: "grok-3",
     modelMode: null,
     message: prompt || "Generate new variations based on this image",
-    fileAttachments: fileMetadataId ? [fileMetadataId] : [],
+    fileAttachments: [],
     imageAttachments: fileMetadataId ? [fileMetadataId] : [],
     disableSearch: false,
     enableImageGeneration: true,
@@ -284,6 +284,14 @@ export async function* streamImageEdit(
           }
 
           if (!resp) continue;
+
+          // Token streaming with isThinking state tracking
+          if (resp.token !== undefined && resp.token !== null) {
+            const token = String(resp.token);
+            if (token && lineCount <= 10) {
+              yield { type: "debug", message: `Grok says: ${token.slice(0, 50)}` };
+            }
+          }
 
           // Image generation progress
           const imgProgress = resp.streamingImageGenerationResponse;
