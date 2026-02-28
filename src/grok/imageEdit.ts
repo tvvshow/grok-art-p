@@ -166,7 +166,7 @@ export async function* streamImageEdit(
   const cookie = buildCookie(sso, ssoRw);
   const headers = getHeaders(cookie);
 
-  // Payload structure matches grok2api AppChatReverse.build_payload()
+  // imageEditModel at top level only; imageEditModelConfig nested under modelMap
   const imageEditModelConfig: Record<string, unknown> = {
     imageReferences: imageUrls,
   };
@@ -175,44 +175,33 @@ export async function* streamImageEdit(
   }
 
   const modelConfigOverride = {
+    imageEditModel: "imagine",
     modelMap: {
-      imageEditModel: "imagine",
       imageEditModelConfig,
     },
-    imageEditModel: "imagine", // Also needed at top level for some versions
   };
 
   const payload: Record<string, unknown> = {
     temporary: true,
     modelName: "grok-3",
-    modelMode: null,
     message: prompt || "Generate new variations based on this image",
-    fileAttachments: [],
-    imageAttachments: fileMetadataId ? [fileMetadataId] : [], // Re-add imageAttachments as string array
-    disableSearch: false, // Re-enable search as per standard behavior, toolOverrides should handle it
+    fileAttachments: fileMetadataId ? [fileMetadataId] : [],
+    imageAttachments: [],
+    disableSearch: false,
     enableImageGeneration: true,
     returnImageBytes: false,
     returnRawGrokInXaiRequest: false,
     enableImageStreaming: true,
     imageGenerationCount: imageCount,
     forceConcise: false,
-    toolOverrides: {}, // Empty toolOverrides to let Grok decide, or specific if needed
+    toolOverrides: {},
     enableSideBySide: true,
     sendFinalMetadata: true,
     isReasoning: false,
-    disableTextFollowUps: false,
+    disableTextFollowUps: true,
     disableMemory: true,
     forceSideBySide: false,
     isAsyncChat: false,
-    disableSelfHarmShortCircuit: false,
-    deviceEnvInfo: {
-      darkModeEnabled: false,
-      devicePixelRatio: 2,
-      screenWidth: 2056,
-      screenHeight: 1329,
-      viewportWidth: 2056,
-      viewportHeight: 1083,
-    },
     responseMetadata: {
       requestModelDetails: { modelId: "grok-imagine-1.0-edit" },
       modelConfigOverride,
@@ -220,7 +209,7 @@ export async function* streamImageEdit(
   };
 
   yield { type: "debug", message: `imageRefs: ${JSON.stringify(imageUrls)}` };
-  yield { type: "debug", message: `payload.imageAttachments: ${JSON.stringify(payload.imageAttachments)}` };
+  yield { type: "debug", message: `payload.fileAttachments: ${JSON.stringify(payload.fileAttachments)}` };
   yield { type: "debug", message: `payload.modelConfigOverride: ${JSON.stringify(modelConfigOverride)}` };
 
   let response: Response;
