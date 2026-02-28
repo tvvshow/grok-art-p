@@ -160,7 +160,8 @@ export async function* streamImageEdit(
   prompt: string,
   imageUrls: string[],
   imageCount: number = 2,
-  parentPostId?: string
+  parentPostId?: string,
+  fileMetadataId?: string
 ): AsyncGenerator<ImageEditUpdate> {
   const cookie = buildCookie(sso, ssoRw);
   const headers = getHeaders(cookie);
@@ -185,8 +186,8 @@ export async function* streamImageEdit(
     modelName: "grok-3",
     modelMode: null,
     message: prompt || "Generate new variations based on this image",
-    fileAttachments: [],
-    imageAttachments: [],
+    fileAttachments: fileMetadataId ? [fileMetadataId] : [],
+    imageAttachments: fileMetadataId ? [fileMetadataId] : [],
     disableSearch: false,
     enableImageGeneration: true,
     returnImageBytes: false,

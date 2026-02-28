@@ -576,7 +576,8 @@ app.post("/api/imagine/img2img", async (c) => {
           prompt,
           [imageUrl],
           Math.min(count, 4),
-          parentPostId
+          parentPostId,
+          uploadResult.fileMetadataId
         )) {
           if (update.type === "error") {
             const msg = update.message || "";
@@ -596,45 +597,17 @@ app.post("/api/imagine/img2img", async (c) => {
             }
           } else if (update.type === "image") {
             imageCount++;
-            const imgUrl = update.url || "";
-            // Fetch image server-side and encode as data URL (assets.grok.com needs auth)
-            let imageSrc = imgUrl;
-            try {
-              const imgCookie = buildCookie(token.sso, token.sso_rw);
-              const imgResp = await fetch(imgUrl, {
-                headers: {
-                  Cookie: imgCookie,
-                  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-                  Referer: "https://grok.com/",
-                },
-              });
-              if (imgResp.ok) {
-                const buf = await imgResp.arrayBuffer();
-                const bytes = new Uint8Array(buf);
-                let binary = "";
-                for (let i = 0; i < bytes.length; i++) {
-                  binary += String.fromCharCode(bytes[i]!);
-                }
-                const b64 = btoa(binary);
-                const ct = imgResp.headers.get("content-type") || "image/jpeg";
-                imageSrc = `data:${ct};base64,${b64}`;
-              } else {
-                await writeEvent("debug", {
-                  type: "debug",
-                  message: `img fetch ${imgResp.status} for ${imgUrl.slice(0, 80)}`,
-                });
-              }
-            } catch (imgErr) {
-              await writeEvent("debug", {
-                type: "debug",
-                message: `img fetch error: ${imgErr instanceof Error ? imgErr.message : String(imgErr)}`,
-              });
+            let imgUrl = update.url || "";
+
+            // Transform to proxy URL if needed
+            if (imgUrl.startsWith("https://assets.grok.com/")) {
+              const path = imgUrl.replace("https://assets.grok.com/", "");
+              imgUrl = `/api/proxy/assets/${path}`;
             }
 
             await writeEvent("image", {
               type: "image",
               url: imgUrl,
-              image_src: imageSrc,
               index: update.index,
               width: 0,
               height: 0,
