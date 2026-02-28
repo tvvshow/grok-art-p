@@ -169,6 +169,7 @@ export async function* streamImageEdit(
   // Payload structure matches grok2api AppChatReverse.build_payload()
   const imageEditModelConfig: Record<string, unknown> = {
     imageReferences: imageUrls,
+    imageEditMode: "image_variation", // Explicitly set edit mode
   };
   if (parentPostId) {
     imageEditModelConfig.parentPostId = parentPostId;
@@ -188,15 +189,15 @@ export async function* streamImageEdit(
     modelMode: null,
     message: prompt || "Generate new variations based on this image",
     fileAttachments: [],
-    imageAttachments: [], // Empty to trigger edit mode via config override
-    disableSearch: true,
+    imageAttachments: fileMetadataId ? [fileMetadataId] : [], // Re-add imageAttachments as string array
+    disableSearch: false, // Re-enable search as per standard behavior, toolOverrides should handle it
     enableImageGeneration: true,
     returnImageBytes: false,
     returnRawGrokInXaiRequest: false,
     enableImageStreaming: true,
     imageGenerationCount: imageCount,
     forceConcise: false,
-    toolOverrides: { imageGen: true },
+    toolOverrides: {}, // Empty toolOverrides to let Grok decide, or specific if needed
     enableSideBySide: true,
     sendFinalMetadata: true,
     isReasoning: false,
@@ -205,6 +206,7 @@ export async function* streamImageEdit(
     forceSideBySide: false,
     isAsyncChat: false,
     disableSelfHarmShortCircuit: false,
+    preset: "default",
     deviceEnvInfo: {
       darkModeEnabled: false,
       devicePixelRatio: 2,
