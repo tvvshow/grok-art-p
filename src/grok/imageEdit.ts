@@ -184,7 +184,7 @@ export async function* streamImageEdit(
 
   const payload: Record<string, unknown> = {
     temporary: true,
-    modelName: "grok-3-image-generation",
+    modelName: "grok-3",
     modelMode: null,
     message: prompt || "Generate new variations based on this image",
     fileAttachments: fileMetadataId ? [fileMetadataId] : [],
