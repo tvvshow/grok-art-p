@@ -166,25 +166,12 @@ export async function* streamImageEdit(
   const cookie = buildCookie(sso, ssoRw);
   const headers = getHeaders(cookie);
 
-  // imageEditModel at top level only; imageEditModelConfig nested under modelMap
-  const imageEditModelConfig: Record<string, unknown> = {
-    imageReferences: imageUrls,
-  };
-  if (parentPostId) {
-    imageEditModelConfig.parentPostId = parentPostId;
-  }
-
-  const modelConfigOverride = {
-    imageEditModel: "imagine",
-    modelMap: {
-      imageEditModelConfig,
-    },
-  };
-
+  // Mirror grok2api _build_payload: fileAttachments + enableImageGeneration, no modelConfigOverride.
+  // modelConfigOverride causes Grok to do web search instead of image generation.
   const payload: Record<string, unknown> = {
     temporary: true,
     modelName: "grok-3",
-    message: prompt || "Generate new variations based on this image",
+    message: prompt || "Generate image variations based on the attached image",
     fileAttachments: fileMetadataId ? [fileMetadataId] : [],
     imageAttachments: [],
     disableSearch: false,
@@ -198,19 +185,18 @@ export async function* streamImageEdit(
     enableSideBySide: true,
     sendFinalMetadata: true,
     isReasoning: false,
+    webpageUrls: [],
     disableTextFollowUps: true,
-    disableMemory: true,
+    disableMemory: false,
     forceSideBySide: false,
+    modelMode: "MODEL_MODE_FAST",
     isAsyncChat: false,
-    responseMetadata: {
-      requestModelDetails: { modelId: "grok-imagine-1.0-edit" },
-      modelConfigOverride,
-    },
+    responseMetadata: { requestModelDetails: { modelId: "grok-3" } },
   };
 
-  yield { type: "debug", message: `imageRefs: ${JSON.stringify(imageUrls)}` };
+  yield { type: "debug", message: `fileMetadataId: ${fileMetadataId || "(none)"}` };
+  yield { type: "debug", message: `parentPostId: ${parentPostId || "(none)"}` };
   yield { type: "debug", message: `payload.fileAttachments: ${JSON.stringify(payload.fileAttachments)}` };
-  yield { type: "debug", message: `payload.modelConfigOverride: ${JSON.stringify(modelConfigOverride)}` };
 
   let response: Response;
   try {
