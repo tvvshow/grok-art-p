@@ -258,6 +258,12 @@ export async function* streamImageEdit(
           if (lineCount <= 3) {
             const keys = resp ? Object.keys(resp).join(",") : "no-resp";
             yield { type: "debug", message: `line#${lineCount} resp-keys: [${keys}]` };
+          } else if (resp) {
+            const keys = Object.keys(resp);
+            const interesting = ["modelResponse","generatedImageUrls","imageUrls","imageEditUris","fileUris","streamingImageGenerationResponse"];
+            if (keys.some(k => interesting.includes(k))) {
+              yield { type: "debug", message: `line#${lineCount} has: [${keys.filter(k => interesting.includes(k)).join(",")}]` };
+            }
           }
 
           if (!resp) continue;
@@ -286,8 +292,11 @@ export async function* streamImageEdit(
           // Final modelResponse - recursively collect image URLs
           const modelResponse = resp.modelResponse;
           if (modelResponse) {
+            const mrKeys = Object.keys(modelResponse).join(",");
+            yield { type: "debug", message: `modelResponse keys: [${mrKeys}]` };
             const urls = collectImages(modelResponse);
-            
+            yield { type: "debug", message: `collectImages found ${urls.length} url(s): ${urls.map(u => u.slice(0, 80)).join(" | ")}` };
+
             // Also check for manually constructed imageEditUris in modelConfigOverride
             if (urls.length === 0 && modelResponse.responseMetadata?.modelConfigOverride) {
               const override = modelResponse.responseMetadata.modelConfigOverride;
@@ -295,7 +304,7 @@ export async function* streamImageEdit(
                 urls.push(...collectImages(override.modelMap.imageEditModelConfig.imageEditUris));
               }
             }
-            
+
             for (const url of urls) {
               if (!collectedUrls.includes(url)) {
                 collectedUrls.push(url);
