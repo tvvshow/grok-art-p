@@ -599,10 +599,9 @@ app.post("/api/imagine/img2img", async (c) => {
             imageCount++;
             let imgUrl = update.url || "";
 
-            // Transform to proxy URL if needed
-            if (imgUrl.startsWith("https://assets.grok.com/")) {
-              imgUrl = `/api/imagine/proxy?url=${encodeURIComponent(imgUrl)}`;
-            }
+            // Keep raw assets.grok.com URL — these are CDN-served images
+            // (proxying with a different token fails because generated images
+            //  are only accessible by the token that generated them)
 
             await writeEvent("image", {
               type: "image",
