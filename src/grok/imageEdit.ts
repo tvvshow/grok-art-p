@@ -169,7 +169,6 @@ export async function* streamImageEdit(
   // Payload structure matches grok2api AppChatReverse.build_payload()
   const imageEditModelConfig: Record<string, unknown> = {
     imageReferences: imageUrls,
-    imageEditMode: "image_variation", // Explicitly set edit mode
   };
   if (parentPostId) {
     imageEditModelConfig.parentPostId = parentPostId;
@@ -206,7 +205,6 @@ export async function* streamImageEdit(
     forceSideBySide: false,
     isAsyncChat: false,
     disableSelfHarmShortCircuit: false,
-    preset: "default",
     deviceEnvInfo: {
       darkModeEnabled: false,
       devicePixelRatio: 2,
@@ -216,7 +214,7 @@ export async function* streamImageEdit(
       viewportHeight: 1083,
     },
     responseMetadata: {
-      requestModelDetails: { modelId: "grok-3-image-generation" },
+      requestModelDetails: { modelId: "grok-imagine-1.0-edit" },
       modelConfigOverride,
     },
   };
