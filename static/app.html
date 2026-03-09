@@ -166,6 +166,11 @@ Content-Type: application/json
   }],
   "stream": true
 }</code></pre>
+                    <p style="margin-top:10px; font-size:13px;"><strong>Base64 直传图片：</strong></p>
+                    <pre><code>// url 字段也可以直接传 base64 编码的图片
+{"type": "image_url", "image_url": {
+  "url": "data:image/jpeg;base64,/9j/4AAQ..."
+}}</code></pre>
                     <p style="margin-top:10px; color:#888; font-size:13px;">
                         提示：<code>content</code> 可以是字符串或数组。使用数组格式时，可同时传入多张图片。
                         兼容 OpenAI Vision API 格式，支持 ChatGPT-Next-Web、OpenCat 等客户端。
