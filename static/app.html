@@ -142,6 +142,35 @@ Content-Type: application/json
   "stream": true
 }</code></pre>
 
+                    <h3>图片理解 (Vision)</h3>
+                    <p>在文本模型对话中发送图片，Grok 会理解图片内容进行回复。支持所有文本模型。</p>
+                    <p><strong>支持的图片格式：</strong></p>
+                    <ul>
+                        <li>HTTP/HTTPS URL — 自动下载并上传到 Grok</li>
+                        <li>Base64 Data URL — <code>data:image/jpeg;base64,...</code></li>
+                    </ul>
+                    <pre><code>POST /v1/chat/completions
+Authorization: Bearer sk-xxxxxxxx
+Content-Type: application/json
+
+{
+  "model": "grok-4",
+  "messages": [{
+    "role": "user",
+    "content": [
+      {"type": "text", "text": "请描述这张图片"},
+      {"type": "image_url", "image_url": {
+        "url": "https://example.com/photo.jpg"
+      }}
+    ]
+  }],
+  "stream": true
+}</code></pre>
+                    <p style="margin-top:10px; color:#888; font-size:13px;">
+                        提示：<code>content</code> 可以是字符串或数组。使用数组格式时，可同时传入多张图片。
+                        兼容 OpenAI Vision API 格式，支持 ChatGPT-Next-Web、OpenCat 等客户端。
+                    </p>
+
                     <h3>对话补全 — Anthropic Messages 格式</h3>
                     <pre><code>POST /v1/messages
 x-api-key: sk-xxxxxxxx
