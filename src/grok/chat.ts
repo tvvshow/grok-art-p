@@ -69,6 +69,20 @@ interface GrokChatPayload {
 }
 
 /**
+ * Convert ArrayBuffer to base64 string (chunked to avoid stack overflow)
+ */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const CHUNK = 0x8000; // 32KB chunks
+  const parts: string[] = [];
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    const chunk = bytes.subarray(i, Math.min(i + CHUNK, bytes.length));
+    parts.push(String.fromCharCode(...chunk));
+  }
+  return btoa(parts.join(""));
+}
+
+/**
  * Download image from URL and upload to Grok, returning fileMetadataIds for vision.
  * Handles both data: URLs (base64) and http(s): URLs.
  */
@@ -90,18 +104,27 @@ async function prepareImageAttachments(
         mimeType = dataUrl.mimeType;
         base64Content = dataUrl.base64Content;
       } else if (url.startsWith("http")) {
-        // Fetch remote image
-        const resp = await fetch(url);
-        if (!resp.ok) continue;
-        mimeType = resp.headers.get("content-type") || "image/jpeg";
-        const buf = await resp.arrayBuffer();
-        // Convert ArrayBuffer to base64
-        const bytes = new Uint8Array(buf);
-        let binary = "";
-        for (let i = 0; i < bytes.length; i++) {
-          binary += String.fromCharCode(bytes[i]);
+        // Fetch remote image with proper User-Agent
+        const resp = await fetch(url, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+            "Accept": "image/*,*/*;q=0.8",
+          },
+          redirect: "follow",
+        });
+        if (!resp.ok) {
+          console.log(`[vision] fetch failed: ${url.slice(0, 100)} → ${resp.status}`);
+          continue;
         }
-        base64Content = btoa(binary);
+        mimeType = resp.headers.get("content-type") || "image/jpeg";
+        // Skip non-image responses
+        if (!mimeType.startsWith("image/")) {
+          console.log(`[vision] not an image: ${mimeType} from ${url.slice(0, 100)}`);
+          continue;
+        }
+        const buf = await resp.arrayBuffer();
+        console.log(`[vision] fetched ${url.slice(0, 80)} → ${buf.byteLength} bytes`);
+        base64Content = arrayBufferToBase64(buf);
       } else {
         continue;
       }
@@ -111,9 +134,10 @@ async function prepareImageAttachments(
       const result = await uploadImage(sso, ssoRw, fileName, mimeType, base64Content);
       if (result.fileMetadataId) {
         ids.push(result.fileMetadataId);
+        console.log(`[vision] uploaded → fileMetadataId: ${result.fileMetadataId}`);
       }
-    } catch {
-      // Skip failed uploads silently
+    } catch (e) {
+      console.log(`[vision] error processing ${url.slice(0, 100)}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
