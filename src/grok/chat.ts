@@ -6,6 +6,7 @@ import { toGrokModel, isImageModel, isVideoModel, requiresInputImage, parseModel
 import { getHeaders, buildCookie } from "./headers";
 import { generateImages } from "./imagine";
 import { generateVideo } from "./video";
+import { uploadImage, parseDataUrl } from "./imageEdit";
 
 const CHAT_API = "https://grok.com/rest/app-chat/conversations/new";
 
@@ -65,6 +66,58 @@ interface GrokChatPayload {
   forceSideBySide: boolean;
   isAsyncChat: boolean;
   disableSelfHarmShortCircuit: boolean;
+}
+
+/**
+ * Download image from URL and upload to Grok, returning fileMetadataIds for vision.
+ * Handles both data: URLs (base64) and http(s): URLs.
+ */
+async function prepareImageAttachments(
+  sso: string,
+  ssoRw: string,
+  imageUrls: string[]
+): Promise<string[]> {
+  const ids: string[] = [];
+
+  for (const url of imageUrls) {
+    try {
+      let mimeType: string;
+      let base64Content: string;
+
+      const dataUrl = parseDataUrl(url);
+      if (dataUrl) {
+        // data:image/png;base64,... format
+        mimeType = dataUrl.mimeType;
+        base64Content = dataUrl.base64Content;
+      } else if (url.startsWith("http")) {
+        // Fetch remote image
+        const resp = await fetch(url);
+        if (!resp.ok) continue;
+        mimeType = resp.headers.get("content-type") || "image/jpeg";
+        const buf = await resp.arrayBuffer();
+        // Convert ArrayBuffer to base64
+        const bytes = new Uint8Array(buf);
+        let binary = "";
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        base64Content = btoa(binary);
+      } else {
+        continue;
+      }
+
+      const ext = mimeType.split("/")[1]?.split(";")[0] || "jpeg";
+      const fileName = `vision_${ids.length}.${ext}`;
+      const result = await uploadImage(sso, ssoRw, fileName, mimeType, base64Content);
+      if (result.fileMetadataId) {
+        ids.push(result.fileMetadataId);
+      }
+    } catch {
+      // Skip failed uploads silently
+    }
+  }
+
+  return ids;
 }
 
 /**
@@ -179,7 +232,8 @@ async function* streamTextChat(
   ssoRw: string,
   text: string,
   modelId: string,
-  showThinking: boolean = true
+  showThinking: boolean = true,
+  imageUrls: string[] = []
 ): AsyncGenerator<ChatUpdate> {
   const modelInfo = toGrokModel(modelId);
   if (!modelInfo) {
@@ -190,6 +244,14 @@ async function* streamTextChat(
   const cookie = buildCookie(sso, ssoRw);
   const headers = getHeaders(cookie);
   const payload = buildPayload(text, modelInfo.grokModel, modelInfo.modelMode, false);
+
+  // Upload images for vision/understanding if provided
+  if (imageUrls.length > 0) {
+    const fileIds = await prepareImageAttachments(sso, ssoRw, imageUrls);
+    if (fileIds.length > 0) {
+      payload.fileAttachments = fileIds;
+    }
+  }
 
   let response: Response;
   try {
@@ -583,8 +645,8 @@ export async function* streamChat(
     return;
   }
 
-  // Handle text models
-  yield* streamTextChat(sso, ssoRw, text, modelId, showThinking);
+  // Handle text models (pass imageUrls for vision/understanding)
+  yield* streamTextChat(sso, ssoRw, text, modelId, showThinking, imageUrls);
 }
 
 /**

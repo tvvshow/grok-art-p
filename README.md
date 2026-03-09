@@ -13,7 +13,9 @@
 ### OpenAI 兼容 API
 - **标准接口** - 支持 `/v1/chat/completions`、`/v1/images/generations`、`/v1/models`
 - **多模型支持** - Grok 3/4/4.1 系列文本模型
+- **图片理解 (Vision)** - 支持在对话中发送图片，Grok 会理解图片内容并回复
 - **图片/视频生成** - 通过 Chat API 生成图片和视频
+- **图生图 (img2img)** - 上传图片后基于图片生成新图片
 - **Token 自动轮换** - 遇到速率限制自动切换账号重试（最多 5 次）
 
 ### Anthropic 兼容 API
@@ -213,6 +215,46 @@ curl https://your-worker.workers.dev/v1/chat/completions \
   -d '{
     "model": "grok-image-16_9",
     "messages": [{"role": "user", "content": "一只可爱的猫咪"}],
+    "stream": true
+  }'
+```
+
+#### 图片理解 (Vision)
+
+支持 OpenAI 标准的 `image_url` 格式，在文本模型对话中发送图片，Grok 会理解图片内容进行回复。支持 HTTP URL 和 base64 data URL。
+
+```bash
+curl https://your-worker.workers.dev/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-4",
+    "messages": [{
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "请描述这张图片的内容"},
+        {"type": "image_url", "image_url": {"url": "https://example.com/photo.jpg"}}
+      ]
+    }],
+    "stream": true
+  }'
+```
+
+也支持 base64 内嵌图片：
+
+```bash
+curl https://your-worker.workers.dev/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-4",
+    "messages": [{
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "这张图里有什么？"},
+        {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,/9j/4AAQ..."}}
+      ]
+    }],
     "stream": true
   }'
 ```
