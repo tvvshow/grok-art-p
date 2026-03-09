@@ -73,7 +73,7 @@ interface GrokChatPayload {
  */
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
-  const CHUNK = 0x8000; // 32KB chunks
+  const CHUNK = 4096;
   const parts: string[] = [];
   for (let i = 0; i < bytes.length; i += CHUNK) {
     const chunk = bytes.subarray(i, Math.min(i + CHUNK, bytes.length));
@@ -82,29 +82,37 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(parts.join(""));
 }
 
+interface VisionResult {
+  fileIds: string[];
+  logs: string[];
+}
+
 /**
  * Download image from URL and upload to Grok, returning fileMetadataIds for vision.
  * Handles both data: URLs (base64) and http(s): URLs.
+ * Returns fileIds + diagnostic logs visible in stream output.
  */
 async function prepareImageAttachments(
   sso: string,
   ssoRw: string,
   imageUrls: string[]
-): Promise<string[]> {
-  const ids: string[] = [];
+): Promise<VisionResult> {
+  const fileIds: string[] = [];
+  const logs: string[] = [];
 
   for (const url of imageUrls) {
+    const label = url.startsWith("data:") ? "base64" : url.slice(0, 80);
     try {
       let mimeType: string;
       let base64Content: string;
 
       const dataUrl = parseDataUrl(url);
       if (dataUrl) {
-        // data:image/png;base64,... format
         mimeType = dataUrl.mimeType;
         base64Content = dataUrl.base64Content;
+        logs.push(`parsed data URL: ${mimeType}, ${base64Content.length} chars`);
       } else if (url.startsWith("http")) {
-        // Fetch remote image with proper User-Agent
+        logs.push(`fetching: ${label}`);
         const resp = await fetch(url, {
           headers: {
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
@@ -113,35 +121,40 @@ async function prepareImageAttachments(
           redirect: "follow",
         });
         if (!resp.ok) {
-          console.log(`[vision] fetch failed: ${url.slice(0, 100)} → ${resp.status}`);
+          logs.push(`fetch FAILED: HTTP ${resp.status} ${resp.statusText}`);
           continue;
         }
         mimeType = resp.headers.get("content-type") || "image/jpeg";
-        // Skip non-image responses
         if (!mimeType.startsWith("image/")) {
-          console.log(`[vision] not an image: ${mimeType} from ${url.slice(0, 100)}`);
+          logs.push(`not an image: content-type=${mimeType}`);
           continue;
         }
         const buf = await resp.arrayBuffer();
-        console.log(`[vision] fetched ${url.slice(0, 80)} → ${buf.byteLength} bytes`);
+        logs.push(`downloaded: ${buf.byteLength} bytes, type=${mimeType}`);
         base64Content = arrayBufferToBase64(buf);
+        logs.push(`base64 encoded: ${base64Content.length} chars`);
       } else {
+        logs.push(`skipped unsupported scheme: ${label}`);
         continue;
       }
 
       const ext = mimeType.split("/")[1]?.split(";")[0] || "jpeg";
-      const fileName = `vision_${ids.length}.${ext}`;
+      const fileName = `vision_${fileIds.length}.${ext}`;
+      logs.push(`uploading to Grok as ${fileName}...`);
       const result = await uploadImage(sso, ssoRw, fileName, mimeType, base64Content);
       if (result.fileMetadataId) {
-        ids.push(result.fileMetadataId);
-        console.log(`[vision] uploaded → fileMetadataId: ${result.fileMetadataId}`);
+        fileIds.push(result.fileMetadataId);
+        logs.push(`upload OK: id=${result.fileMetadataId}`);
+      } else {
+        logs.push(`upload returned no fileMetadataId: ${JSON.stringify(result).slice(0, 200)}`);
       }
     } catch (e) {
-      console.log(`[vision] error processing ${url.slice(0, 100)}: ${e instanceof Error ? e.message : String(e)}`);
+      const msg = e instanceof Error ? e.message : String(e);
+      logs.push(`ERROR for ${label}: ${msg}`);
     }
   }
 
-  return ids;
+  return { fileIds, logs };
 }
 
 /**
@@ -271,9 +284,17 @@ async function* streamTextChat(
 
   // Upload images for vision/understanding if provided
   if (imageUrls.length > 0) {
-    const fileIds = await prepareImageAttachments(sso, ssoRw, imageUrls);
-    if (fileIds.length > 0) {
-      payload.fileAttachments = fileIds;
+    const vision = await prepareImageAttachments(sso, ssoRw, imageUrls);
+    // Output vision processing logs as think block so user can see what happened
+    if (vision.logs.length > 0) {
+      yield { type: "token", content: "<think>\n" };
+      for (const log of vision.logs) {
+        yield { type: "token", content: `${log}\n` };
+      }
+      yield { type: "token", content: "</think>\n" };
+    }
+    if (vision.fileIds.length > 0) {
+      payload.fileAttachments = vision.fileIds;
     }
   }
 
