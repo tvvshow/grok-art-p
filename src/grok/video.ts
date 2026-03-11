@@ -171,7 +171,14 @@ export async function* generateVideo(
 
     if (!response.ok) {
       const text = await response.text();
-      yield { type: "error", message: `HTTP ${response.status}: ${text.slice(0, 200)}` };
+      if (response.status === 403 && text.includes("Just a moment")) {
+        yield {
+          type: "error",
+          message: "HTTP 403 Cloudflare challenge. Token likely missing/expired user_id or cf_clearance.",
+        };
+      } else {
+        yield { type: "error", message: `HTTP ${response.status}: ${text.slice(0, 200)}` };
+      }
       return;
     }
 

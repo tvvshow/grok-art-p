@@ -227,6 +227,11 @@ export async function* streamImageEdit(
     yield { type: "debug", message: `Chat API error body: ${text.slice(0, 500)}` };
     if (status === 429) {
       yield { type: "error", message: "Rate limited (429)" };
+    } else if (status === 403 && text.includes("Just a moment")) {
+      yield {
+        type: "error",
+        message: "HTTP 403 Cloudflare challenge. Token likely missing/expired user_id or cf_clearance.",
+      };
     } else {
       yield { type: "error", message: `HTTP ${status}: ${text.slice(0, 300)}` };
     }

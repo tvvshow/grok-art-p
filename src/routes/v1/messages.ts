@@ -90,7 +90,10 @@ function convertContent(content: AnthropicContent): OAIContent {
     .filter((p): p is NonNullable<typeof p> => p !== null);
 
   // Simplify to string if only one text part
-  if (parts.length === 1 && parts[0].type === "text") return parts[0].text || "";
+  if (parts.length === 1) {
+    const firstPart = parts[0];
+    if (firstPart?.type === "text") return firstPart.text ?? "";
+  }
   return parts;
 }
 

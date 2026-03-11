@@ -6,6 +6,26 @@ const ASSETS_BASE = "https://assets.grok.com";
 
 export const proxyRoutes = new Hono<{ Bindings: Env }>();
 
+function resolveTargetAssetUrl(assetPath: string): string | null {
+  const cleaned = assetPath.replace(/^\/+/, "");
+  if (!cleaned) return null;
+
+  let decoded = cleaned;
+  try {
+    decoded = decodeURIComponent(cleaned);
+  } catch {
+    // Keep raw path when decode fails
+  }
+
+  if (decoded.startsWith("https://assets.grok.com/")) {
+    return decoded;
+  }
+  if (decoded.startsWith("http://") || decoded.startsWith("https://")) {
+    return null;
+  }
+  return `${ASSETS_BASE}/${decoded}`;
+}
+
 function buildProxyHeaders(sso: string, sso_rw?: string, user_id?: string, cf_clearance?: string): Record<string, string> {
   // Cookie order matters - follow original project format
   let cookie = "";
@@ -44,18 +64,28 @@ function buildProxyHeaders(sso: string, sso_rw?: string, user_id?: string, cf_cl
 proxyRoutes.get("/api/proxy/assets/*", async (c) => {
   const url = new URL(c.req.url);
   const assetPath = url.pathname.replace(/^\/api\/proxy\/assets/, "");
+  const tokenId = c.req.query("token");
 
   if (!assetPath || assetPath === "/") {
     return c.json({ success: false, error: "Missing asset path" }, 400);
   }
 
-  // Get a random token for authentication
-  const token = await getRandomToken(c.env.DB);
+  // Get specified token or random token
+  let token;
+  if (tokenId) {
+    token = await getToken(c.env.DB, tokenId);
+  }
+  if (!token) {
+    token = await getRandomToken(c.env.DB);
+  }
   if (!token) {
     return c.json({ success: false, error: "No available tokens" }, 503);
   }
 
-  const targetUrl = `${ASSETS_BASE}${assetPath}`;
+  const targetUrl = resolveTargetAssetUrl(assetPath);
+  if (!targetUrl) {
+    return c.json({ success: false, error: "Invalid asset path" }, 400);
+  }
   const headers = buildProxyHeaders(token.sso, token.sso_rw, token.user_id, token.cf_clearance);
 
   try {

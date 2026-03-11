@@ -38,6 +38,10 @@ export interface TokenExport {
   "x-userid": string;
 }
 
+export function hasBrowserAuth(token: Pick<TokenRow, "user_id" | "cf_clearance"> | null | undefined): boolean {
+  return Boolean(token?.user_id && token.cf_clearance);
+}
+
 function generateTokenId(sso: string): string {
   return md5(sso);
 }
@@ -106,6 +110,34 @@ export async function getRandomToken(db: Env["DB"], excludeIds: string[] = []): 
   const now = nowMs();
   await dbRun(db, "UPDATE tokens SET last_used = ?, use_count = use_count + 1 WHERE id = ?", [now, token.id]);
 
+  return token;
+}
+
+export async function getRandomTokenWithBrowserAuth(
+  db: Env["DB"],
+  excludeIds: string[] = []
+): Promise<TokenRow | null> {
+  const placeholders = excludeIds.length > 0
+    ? `AND id NOT IN (${excludeIds.map(() => "?").join(",")})`
+    : "";
+
+  const rows = await dbAll<TokenRow>(
+    db,
+    `SELECT id, sso, sso_rw, user_id, cf_clearance, name, added_at, last_used, use_count, status, nsfw_enabled
+     FROM tokens
+     WHERE status = 'active'
+       AND user_id != ''
+       AND cf_clearance != ''
+       ${placeholders}`,
+    excludeIds
+  );
+
+  if (rows.length === 0) return null;
+  const token = rows[Math.floor(Math.random() * rows.length)];
+  if (!token) return null;
+
+  const now = nowMs();
+  await dbRun(db, "UPDATE tokens SET last_used = ?, use_count = use_count + 1 WHERE id = ?", [now, token.id]);
   return token;
 }
 

@@ -12,6 +12,36 @@ const app = new Hono<HonoEnv>();
 
 const MAX_RETRIES = 5;
 
+function isRetryableTokenError(message: string): boolean {
+  const msg = String(message || "");
+  return (
+    msg.includes("429") ||
+    msg.includes("Rate limited") ||
+    msg.includes("Cloudflare challenge") ||
+    msg.includes("HTTP 403")
+  );
+}
+
+function normalizeImageUrlForGrok(rawUrl: string): string {
+  const trimmed = String(rawUrl || "").trim();
+  if (!trimmed) return trimmed;
+
+  try {
+    const parsed = new URL(trimmed, "https://local.invalid");
+    const isProxyPath = parsed.pathname === "/api/imagine/proxy";
+    if (isProxyPath) {
+      const proxied = parsed.searchParams.get("url");
+      if (proxied && proxied.startsWith("https://assets.grok.com/")) {
+        return proxied;
+      }
+    }
+  } catch {
+    // Keep original URL if parsing fails
+  }
+
+  return trimmed;
+}
+
 // Image generation (SSE stream) with auto-retry on 429
 app.post("/api/imagine/generate", async (c) => {
   const body = await c.req.json<{
@@ -85,7 +115,7 @@ app.post("/api/imagine/generate", async (c) => {
             const msg = update.message;
 
             // Check for 429 rate limit
-            if (msg.includes("429") || msg.includes("Rate limited")) {
+            if (isRetryableTokenError(msg)) {
               excludedTokenIds.push(token.id);
               retryCount++;
 
@@ -134,7 +164,7 @@ app.post("/api/imagine/generate", async (c) => {
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
 
-        if (message.includes("429") || message.includes("Rate limited")) {
+        if (isRetryableTokenError(message)) {
           excludedTokenIds.push(token.id);
           retryCount++;
 
@@ -198,6 +228,7 @@ app.post("/api/video/generate", async (c) => {
     mode = "custom",
     token_id,
   } = body;
+  const normalizedImageUrl = normalizeImageUrlForGrok(image_url);
 
   // Stream SSE response
   const stream = new TransformStream();
@@ -249,10 +280,10 @@ app.post("/api/video/generate", async (c) => {
         for await (const update of generateVideo(
           token.sso,
           token.sso_rw,
-          token.user_id,
-          token.cf_clearance,
+          "",
+          "",
           token.id,
-          image_url,
+          normalizedImageUrl,
           prompt,
           parent_post_id,
           aspect_ratio,
@@ -264,7 +295,7 @@ app.post("/api/video/generate", async (c) => {
             const msg = update.message;
 
             // Check for 429 rate limit
-            if (msg.includes("429") || msg.includes("Rate limited")) {
+            if (isRetryableTokenError(msg)) {
               excludedTokenIds.push(token.id);
               retryCount++;
 
@@ -303,7 +334,7 @@ app.post("/api/video/generate", async (c) => {
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
 
-        if (message.includes("429") || message.includes("Rate limited")) {
+        if (isRetryableTokenError(message)) {
           excludedTokenIds.push(token.id);
           retryCount++;
 
@@ -400,7 +431,7 @@ app.post("/api/imagine/scroll", async (c) => {
           if (update.type === "error") {
             const msg = update.message;
 
-            if (msg.includes("429") || msg.includes("Rate limited")) {
+            if (isRetryableTokenError(msg)) {
               excludedTokenIds.push(token.id);
               retryCount++;
 
@@ -425,7 +456,7 @@ app.post("/api/imagine/scroll", async (c) => {
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
 
-        if (message.includes("429") || message.includes("Rate limited")) {
+        if (isRetryableTokenError(message)) {
           excludedTokenIds.push(token.id);
           retryCount++;
           continue;
@@ -531,8 +562,8 @@ app.post("/api/imagine/img2img", async (c) => {
           fileName,
           mimeType,
           base64Content,
-          token.user_id,
-          token.cf_clearance
+          undefined,
+          undefined
         );
 
         await writeEvent("debug", {
@@ -555,8 +586,8 @@ app.post("/api/imagine/img2img", async (c) => {
           token.sso_rw,
           imageUrl,
           uploadResult.fileUri,
-          token.user_id,
-          token.cf_clearance
+          undefined,
+          undefined
         );
 
         await writeEvent("debug", {
@@ -582,13 +613,13 @@ app.post("/api/imagine/img2img", async (c) => {
           Math.min(count, 4),
           parentPostId,
           uploadResult.fileMetadataId,
-          token.user_id,
-          token.cf_clearance
+          undefined,
+          undefined
         )) {
           if (update.type === "error") {
             const msg = update.message || "";
 
-            if (msg.includes("429") || msg.includes("Rate limited")) {
+            if (isRetryableTokenError(msg)) {
               excludedTokenIds.push(token.id);
               retryCount++;
               await writeEvent("info", {
@@ -603,17 +634,20 @@ app.post("/api/imagine/img2img", async (c) => {
             }
           } else if (update.type === "image") {
             imageCount++;
-            let imgUrl = update.url || "";
+            const originalImgUrl = update.url || "";
+            let imageSrc = originalImgUrl;
 
             // Proxy with the same token that generated the image —
             // assets.grok.com/users/.../generated/... requires the generating user's auth
-            if (imgUrl.startsWith("https://assets.grok.com/")) {
-              imgUrl = `/api/imagine/proxy?url=${encodeURIComponent(imgUrl)}&token_id=${encodeURIComponent(token.id)}`;
+            if (originalImgUrl.startsWith("https://assets.grok.com/")) {
+              imageSrc = `/api/imagine/proxy?url=${encodeURIComponent(originalImgUrl)}&token_id=${encodeURIComponent(token.id)}`;
             }
 
             await writeEvent("image", {
               type: "image",
-              url: imgUrl,
+              url: originalImgUrl,
+              image_src: imageSrc,
+              job_id: parentPostId || uploadResult.fileMetadataId,
               index: update.index,
               width: 0,
               height: 0,
@@ -644,7 +678,7 @@ app.post("/api/imagine/img2img", async (c) => {
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
 
-        if (message.includes("429") || message.includes("Rate limited")) {
+        if (isRetryableTokenError(message)) {
           excludedTokenIds.push(token.id);
           retryCount++;
           await writeEvent("info", {
