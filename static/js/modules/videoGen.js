@@ -1,5 +1,7 @@
 import { readStream, log, clearLog, bus } from '../utils.js';
 
+let selectedTokenId = '';
+
 export function initVideoGen() {
     document.getElementById('btn-video-gen').onclick = generateVideo;
 
@@ -11,6 +13,7 @@ export function initVideoGen() {
         // Update form
         document.getElementById('video-url').value = data.url;
         document.getElementById('video-post-id').value = data.job_id;
+        selectedTokenId = data.token_id || '';
 
         // Update preview
         const preview = document.getElementById('video-preview');
@@ -53,7 +56,8 @@ async function generateVideo() {
         prompt: prompt,
         video_length: parseInt(document.getElementById('video-len').value),
         resolution: document.getElementById('video-res').value,
-        mode: document.getElementById('video-mode').value
+        mode: document.getElementById('video-mode').value,
+        token_id: selectedTokenId || undefined
     }, {
         onProgress: (data) => {
             progress.querySelector('.progress-fill').style.width = data.progress + '%';

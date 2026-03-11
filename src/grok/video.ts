@@ -71,6 +71,7 @@ async function createMediaPost(
 }
 
 async function likePost(postId: string, cookie: string): Promise<boolean> {
+  if (!postId) return false;
   const headers = getHeaders(cookie, `https://grok.com/imagine/post/${postId}`);
 
   try {
@@ -86,6 +87,16 @@ async function likePost(postId: string, cookie: string): Promise<boolean> {
   }
 }
 
+function extractPostIdFromUrl(imageUrl: string): string | null {
+  try {
+    const url = new URL(imageUrl);
+    const match = url.pathname.match(/\/([a-zA-Z0-9_-]+)\.(png|jpg|jpeg|webp)$/i);
+    return match?.[1] || null;
+  } catch {
+    return null;
+  }
+}
+
 function buildVideoPayload(
   imageUrl: string,
   prompt: string,
@@ -96,14 +107,16 @@ function buildVideoPayload(
   mode: string
 ): Record<string, unknown> {
   const message = `${imageUrl}  ${prompt} --mode=${mode}`;
-
-  return {
+  const payload: Record<string, unknown> = {
     temporary: true,
     modelName: "grok-3",
     message,
     toolOverrides: { videoGen: true },
     enableSideBySide: true,
-    responseMetadata: {
+  };
+
+  if (parentPostId) {
+    payload.responseMetadata = {
       experiments: [],
       modelConfigOverride: {
         modelMap: {
@@ -116,8 +129,10 @@ function buildVideoPayload(
           },
         },
       },
-    },
-  };
+    };
+  }
+
+  return payload;
 }
 
 export async function* generateVideo(
@@ -151,7 +166,14 @@ export async function* generateVideo(
     }
   }
 
-  const headers = getHeaders(cookie, `https://grok.com/imagine/post/${actualPostId}`);
+  if (!actualPostId) {
+    actualPostId = extractPostIdFromUrl(imageUrl) || "";
+  }
+
+  const referer = actualPostId
+    ? `https://grok.com/imagine/post/${actualPostId}`
+    : "https://grok.com/imagine";
+  const headers = getHeaders(cookie, referer);
   const payload = buildVideoPayload(
     imageUrl,
     prompt,
@@ -207,9 +229,30 @@ export async function* generateVideo(
         if (!line.trim()) continue;
 
         try {
-          const data = JSON.parse(line) as Record<string, unknown>;
-          const result = (data.result as Record<string, unknown>)?.response as Record<string, unknown> | undefined;
-          const videoResp = result?.streamingVideoGenerationResponse as Record<string, unknown> | undefined;
+          const trimmed = line.trim();
+          if (trimmed.startsWith("event:")) continue;
+          const jsonText = trimmed.startsWith("data:")
+            ? trimmed.slice(5).trim()
+            : trimmed;
+          if (!jsonText || jsonText === "[DONE]") continue;
+
+          const data = JSON.parse(jsonText) as Record<string, unknown>;
+          const resultObj = data.result as Record<string, unknown> | undefined;
+          const responseObj = (resultObj?.response as Record<string, unknown> | undefined) || resultObj;
+
+          let videoResp =
+            (responseObj?.streamingVideoGenerationResponse as Record<string, unknown> | undefined) ||
+            (responseObj?.videoGenerationResponse as Record<string, unknown> | undefined);
+
+          if (!videoResp && responseObj) {
+            const hasDirectVideoFields =
+              typeof responseObj.videoUrl === "string" ||
+              typeof responseObj.progress === "number" ||
+              typeof responseObj.videoPostId === "string";
+            if (hasDirectVideoFields) {
+              videoResp = responseObj;
+            }
+          }
 
           if (videoResp) {
             const progress = (videoResp.progress as number) || 0;

@@ -134,7 +134,10 @@ app.post("/api/imagine/generate", async (c) => {
             }
           } else if (update.type === "image") {
             totalCollected++;
-            await writeEvent("image", update);
+            await writeEvent("image", {
+              ...update,
+              token_id: token.id,
+            });
 
             // Update progress with total collected
             await writeEvent("progress", {
@@ -446,7 +449,10 @@ app.post("/api/imagine/scroll", async (c) => {
               return;
             }
           } else if (update.type === "image") {
-            await writeEvent("image", update);
+            await writeEvent("image", {
+              ...update,
+              token_id: token.id,
+            });
           } else if (update.type === "done") {
             await writeEvent("done", {});
             await writer.close();
@@ -648,6 +654,7 @@ app.post("/api/imagine/img2img", async (c) => {
               url: originalImgUrl,
               image_src: imageSrc,
               job_id: parentPostId || uploadResult.fileMetadataId,
+              token_id: token.id,
               index: update.index,
               width: 0,
               height: 0,

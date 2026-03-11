@@ -26,6 +26,7 @@ dist/
 
 # Local tools
 .ace-tool/
+.codex/
 
 # Test coverage
 coverage/
