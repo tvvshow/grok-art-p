@@ -37,9 +37,11 @@ export async function uploadImage(
   ssoRw: string,
   fileName: string,
   fileMimeType: string,
-  base64Content: string
+  base64Content: string,
+  userId?: string,
+  cfClearance?: string
 ): Promise<UploadResult> {
-  const cookie = buildCookie(sso, ssoRw);
+  const cookie = buildCookie(sso, ssoRw, userId, cfClearance);
   const headers = getHeaders(cookie);
 
   const response = await fetch(UPLOAD_API, {
@@ -75,9 +77,11 @@ export async function createMediaPost(
   sso: string,
   ssoRw: string,
   imageUrl: string,
-  fileUri: string
+  fileUri: string,
+  userId?: string,
+  cfClearance?: string
 ): Promise<string> {
-  const cookie = buildCookie(sso, ssoRw);
+  const cookie = buildCookie(sso, ssoRw, userId, cfClearance);
   const headers = getHeaders(cookie);
 
   try {
@@ -160,9 +164,11 @@ export async function* streamImageEdit(
   imageUrls: string[],
   imageCount: number = 1,
   parentPostId?: string,
-  fileMetadataId?: string
+  fileMetadataId?: string,
+  userId?: string,
+  cfClearance?: string
 ): AsyncGenerator<ImageEditUpdate> {
-  const cookie = buildCookie(sso, ssoRw);
+  const cookie = buildCookie(sso, ssoRw, userId, cfClearance);
   // Use imagine page as Referer (same as video.ts) to signal imagine context.
   // parentPostId from createMediaPost, or fall back to fileMetadataId.
   const refPostId = parentPostId || fileMetadataId;

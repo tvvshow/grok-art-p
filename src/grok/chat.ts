@@ -95,7 +95,9 @@ interface VisionResult {
 async function prepareImageAttachments(
   sso: string,
   ssoRw: string,
-  imageUrls: string[]
+  imageUrls: string[],
+  userId?: string,
+  cfClearance?: string
 ): Promise<VisionResult> {
   const fileIds: string[] = [];
   const logs: string[] = [];
@@ -141,7 +143,7 @@ async function prepareImageAttachments(
       const ext = mimeType.split("/")[1]?.split(";")[0] || "jpeg";
       const fileName = `vision_${fileIds.length}.${ext}`;
       logs.push(`uploading to Grok as ${fileName}...`);
-      const result = await uploadImage(sso, ssoRw, fileName, mimeType, base64Content);
+      const result = await uploadImage(sso, ssoRw, fileName, mimeType, base64Content, userId, cfClearance);
       if (result.fileMetadataId) {
         fileIds.push(result.fileMetadataId);
         logs.push(`upload OK: id=${result.fileMetadataId}`);
@@ -270,7 +272,9 @@ async function* streamTextChat(
   text: string,
   modelId: string,
   showThinking: boolean = true,
-  imageUrls: string[] = []
+  imageUrls: string[] = [],
+  userId?: string,
+  cfClearance?: string
 ): AsyncGenerator<ChatUpdate> {
   const modelInfo = toGrokModel(modelId);
   if (!modelInfo) {
@@ -278,13 +282,13 @@ async function* streamTextChat(
     return;
   }
 
-  const cookie = buildCookie(sso, ssoRw);
+  const cookie = buildCookie(sso, ssoRw, userId, cfClearance);
   const headers = getHeaders(cookie);
   const payload = buildPayload(text, modelInfo.grokModel, modelInfo.modelMode, false);
 
   // Upload images for vision/understanding if provided
   if (imageUrls.length > 0) {
-    const vision = await prepareImageAttachments(sso, ssoRw, imageUrls);
+    const vision = await prepareImageAttachments(sso, ssoRw, imageUrls, userId, cfClearance);
     // Output vision processing logs as think block so user can see what happened
     if (vision.logs.length > 0) {
       yield { type: "token", content: "<think>\n" };
@@ -666,7 +670,9 @@ export async function* streamChat(
   showThinking: boolean = true,
   tokenId: string = "",
   baseUrl: string = "",
-  posterPreview: boolean = false
+  posterPreview: boolean = false,
+  userId?: string,
+  cfClearance?: string
 ): AsyncGenerator<ChatUpdate> {
   const { text, imageUrls } = extractMessages(messages);
 
@@ -691,7 +697,7 @@ export async function* streamChat(
   }
 
   // Handle text models (pass imageUrls for vision/understanding)
-  yield* streamTextChat(sso, ssoRw, text, modelId, showThinking, imageUrls);
+  yield* streamTextChat(sso, ssoRw, text, modelId, showThinking, imageUrls, userId, cfClearance);
 }
 
 /**

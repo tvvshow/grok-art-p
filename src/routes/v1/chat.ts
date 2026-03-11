@@ -150,7 +150,9 @@ app.post("/completions", async (c) => {
               true, // showThinking
               token.id, // tokenId for video generation
               baseUrl, // baseUrl for building full proxy URLs
-              posterPreview // video poster preview
+              posterPreview, // video poster preview
+              token.user_id, // userId for vision
+              token.cf_clearance // cf_clearance for vision
             )) {
               if (update.type === "error") {
                 const msg = update.message || "";
@@ -239,7 +241,9 @@ app.post("/completions", async (c) => {
         true, // showThinking
         token.id, // tokenId for video generation
         baseUrl, // baseUrl for building full proxy URLs
-        posterPreview // video poster preview
+        posterPreview, // video poster preview
+        token.user_id, // userId for vision
+        token.cf_clearance // cf_clearance for vision
       )) {
         if (update.type === "error") {
           const msg = update.message || "";
