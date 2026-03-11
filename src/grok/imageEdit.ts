@@ -175,10 +175,14 @@ export async function* streamImageEdit(
   const referer = refPostId ? `https://grok.com/imagine/post/${refPostId}` : undefined;
   const headers = getHeaders(cookie, referer);
 
+  // Include image URL in message (like video.ts does) - Grok needs this!
+  const imageUrl = imageUrls[0] || "";
+  const message = imageUrl ? `${imageUrl}  ${prompt || ""}`.trimEnd() : (prompt || "Generate image variations");
+
   const payload: Record<string, unknown> = {
     temporary: true,
     modelName: "grok-3",
-    message: prompt || "Generate image variations based on the attached image",
+    message,
     fileAttachments: fileMetadataId ? [fileMetadataId] : [],
     imageAttachments: [],
     disableSearch: false,
@@ -196,9 +200,6 @@ export async function* streamImageEdit(
     disableTextFollowUps: true,
     disableMemory: false,
     forceSideBySide: false,
-    modelMode: "MODEL_MODE_FAST",
-    isAsyncChat: false,
-    responseMetadata: { requestModelDetails: { modelId: "grok-3" } },
   };
 
   yield { type: "debug", message: `referer: ${referer || "(default)"}` };
